@@ -13,19 +13,18 @@ from FuncionesMineria import (analizar_variables_categoricas, cuentaDistintos, f
 # Cargo los datos
 datos = pd.read_excel('src/data/DatosEleccionesEspaña.xlsx')
 
-# Visualizamos algunas columnas
-print(datos.head(10))
+# Eliminamos las variables que no usaremos
+variables_a_eliminar = ["Izda_Pct", "Dcha_Pct", "Otros_Pct", "Izquierda", "Derecha"]
+
+datos = datos.drop(columns=variables_a_eliminar)
 
 # Comprobamos el tipo de formato de las variables variable que se ha asignado en la lectura.
 # No todas las categoricas estan como queremos
 print(datos.dtypes)
 
-# Indico las categóricas que aparecen como numéricas
-numericasAcategoricas = ['Compra', 'CalifProductor', 'Region']
-
-# Las transformo en categóricas
-for var in numericasAcategoricas:
-    datos[var] = datos[var].astype(str)
+# Las variables categoricas en un comienzo son: Name, CCAA, ActividadPpal, Densidad
+# El resto son todas continuas
+# Todas ellas tienen el tipo correcto.
 
 # Genera una lista con los nombres de las variables.
 variables = list(datos.columns)  
@@ -35,32 +34,29 @@ numericas = datos.select_dtypes(include=['int', 'int32', 'int64','float', 'float
 
 # Seleccionar las columnas categóricas del DataFrame
 categoricas = [variable for variable in variables if variable not in numericas]
- 
-# Comprobamos que todas las variables tienen el formato que queremos  
-datos.dtypes
 
 # Frecuencias de los valores en las variables categóricas
-analizar_variables_categoricas(datos)
+analisis_categoricas = analizar_variables_categoricas(datos)
 
-# Si quisieramos conocer las diferentes categorias de una variable
-# categórica, por ejemplo CalifProductor
-datos['CalifProductor'].unique()
+print(analisis_categoricas)
 
 # Cuenta el número de valores distintos de cada una de las variables numéricas de un DataFrame
-cuentaDistintos(datos)
+print(cuentaDistintos(datos))
 
 # Descriptivos variables numéricas mediante función describe() de Python
 descriptivos_num = datos.describe().T
 
+print(descriptivos_num)
 # Añadimos más descriptivos a los anteriores
 for num in numericas:
     descriptivos_num.loc[num, "Asimetria"] = datos[num].skew()
     descriptivos_num.loc[num, "Kurtosis"] = datos[num].kurtosis()
     descriptivos_num.loc[num, "Rango"] = np.ptp(datos[num].dropna().values)
 
+print(descriptivos_num)
 
 # Muestra valores perdidos
-datos[variables].isna().sum()
+print(datos[variables].isna().sum())
 
 
 # Corregimos los errores detectados
@@ -70,13 +66,15 @@ for x in categoricas:
     datos[x] = datos[x].replace('nan', np.nan) 
 
 # Missings no declarados variables cualitativas (NSNC, ?)
-datos['Clasificacion'] = datos['Clasificacion'].replace('?', np.nan)
+datos['Densidad'] = datos['Densidad'].replace('?', np.nan)
 
 # Missings no declarados variables cuantitativas (-1, 99999)
-datos['Azucar'] = datos['Azucar'].replace(99999, np.nan)
+datos['Explotaciones'] = datos['Explotaciones'].replace(99999, np.nan)
 
 # Valores fuera de rango
-datos['Alcohol'] = [x if 0 <= x <= 100 else np.nan for x in datos['Alcohol']]
+datos['ForeignersPtge'] = [x if 0 <= x <= 100 else np.nan for x in datos['ForeignersPtge']]
+datos['SameComAutonPtge'] = [x if 0 <= x <= 100 else np.nan for x in datos['SameComAutonPtge']]
+datos['PobChange_pct'] = [x if x <= 100 else np.nan for x in datos['PobChange_pct']]
 
 # Errores de escritura en variables cualitativas.
 datos['Etiqueta'] = datos['Etiqueta'].replace({'b': 'B', 'm': 'M', 'mb': 'MB', 'mm': 'MM', 'r': 'R'})
