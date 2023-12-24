@@ -1,0 +1,12 @@
+name: data_mining
+channels:
+  - defaults
+dependencies:
+  - python=3.10
+  - pandas
+  - numpy
+  - seaborn
+  - matplotlib
+  - pip
+  - pip:
+    - pickle
