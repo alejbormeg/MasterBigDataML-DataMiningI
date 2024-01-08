@@ -76,20 +76,17 @@ datos['ForeignersPtge'] = [x if 0 <= x <= 100 else np.nan for x in datos['Foreig
 datos['SameComAutonPtge'] = [x if 0 <= x <= 100 else np.nan for x in datos['SameComAutonPtge']]
 datos['PobChange_pct'] = [x if x <= 100 else np.nan for x in datos['PobChange_pct']]
 
-# Errores de escritura en variables cualitativas.
-datos['Etiqueta'] = datos['Etiqueta'].replace({'b': 'B', 'm': 'M', 'mb': 'MB', 'mm': 'MM', 'r': 'R'})
-
-# Junto categorías poco representadas de las variables categóricas
-datos['CalifProductor'] = datos['CalifProductor'].replace({'0': '0-1', '1': '0-1', '2': '2', '3': '3', '4': '4', '5': '5-12', '6': '5-12', 
-         '7': '5-12', '8': '5-12', '9': '5-12', '10': '5-12', '11': '5-12', '12': '5-12'})
+# # Junto categorías poco representadas de las variables categóricas
+# datos['CalifProductor'] = datos['CalifProductor'].replace({'0': '0-1', '1': '0-1', '2': '2', '3': '3', '4': '4', '5': '5-12', '6': '5-12', 
+#          '7': '5-12', '8': '5-12', '9': '5-12', '10': '5-12', '11': '5-12', '12': '5-12'})
 
 
 # Indico la variableObj, el ID y las Input (los atipicos y los missings se gestionan
 # solo de las variables input)
-datos = datos.set_index(datos['ID']).drop('ID', axis = 1)
-varObjCont = datos['Beneficio']
-varObjBin = datos['Compra']
-datos_input = datos.drop(['Beneficio', 'Compra'], axis = 1)
+datos = datos.set_index(datos['Name']).drop('Name', axis = 1)
+varObjCont = datos['AbstentionPtge']
+varObjBin = datos['AbstencionAlta']
+datos_input = datos.drop(['AbstentionPtge', 'AbstencionAlta'], axis = 1)
 
 # Genera una lista con los nombres de las variables del cojunto de datos input.
 variables_input = list(datos_input.columns)  
@@ -115,6 +112,8 @@ categoricas_input = [variable for variable in variables_input if variable not in
 # La proporción de valores atípicos se calcula dividiendo la cantidad de valores atípicos por el número total de filas
 resultados = {x: atipicosAmissing(datos_input[x])[1] / len(datos_input) for x in numericas_input}
 
+print(resultados)
+
 # Modifico los atipicos como missings
 for x in numericas_input:
     datos_input[x] = atipicosAmissing(datos_input[x])[0]
@@ -125,19 +124,22 @@ for x in numericas_input:
 patron_perdidos(datos_input)
 
 # Muestra total de valores perdidos por cada variable
-datos_input[variables_input].isna().sum()
+print(datos_input[variables_input].isna().sum())
 
 # Muestra proporción de valores perdidos por cada variable (guardo la información)
 prop_missingsVars = datos_input.isna().sum()/len(datos_input)
 
+print(prop_missingsVars)
+
 # Creamos la variable prop_missings que recoge el número de valores perdidos por cada observación
 datos_input['prop_missings'] = datos_input.isna().mean(axis = 1)
+print(datos_input)
 
 # Realizamos un estudio descriptivo básico a la nueva variable
-datos_input['prop_missings'].describe()
+print(datos_input['prop_missings'].describe())
 
 # Calculamos el número de valores distintos que tiene la nueva variable
-len(datos_input['prop_missings'].unique())
+print(len(datos_input['prop_missings'].unique()))
 
 # Elimino las observaciones con mas de la mitad de datos missings (no hay ninguna)
 eliminar = datos_input['prop_missings'] > 0.5
@@ -160,28 +162,26 @@ datos_input = datos_input.drop(eliminar, axis = 1)
 # Recategorizo categoricas con "suficientes" observaciones missings
 # Solo la variable Clasificacion que es la que tiene un 26% missing
 # Se considera una categoria mas los missing.
-datos_input['Clasificacion'] = datos_input['Clasificacion'].fillna('Desconocido')
+# datos_input['Clasificacion'] = datos_input['Clasificacion'].fillna('Desconocido')
 
 ## IMPUTACIONES
 # Imputo todas las cuantitativas, seleccionar el tipo de imputacion: media, mediana o aleatorio
 for x in numericas_input:
-    datos_input[x] = ImputacionCuant(datos_input[x], 'aleatorio')
+    simetria = datos_input[x].skew()
+    if simetria >= 0:
+        datos_input[x] = ImputacionCuant(datos_input[x], 'media')
+    else:
+        datos_input[x] = ImputacionCuant(datos_input[x], 'mediana')
 
 # Imputo todas las cualitativas, seleccionar el tipo de imputacion: moda o aleatorio
 for x in categoricas_input:
-    datos_input[x] = ImputacionCuali(datos_input[x], 'aleatorio')
+    datos_input[x] = ImputacionCuali(datos_input[x], 'moda')
 
 # Reviso que no queden datos missings
-datos_input.isna().sum()
-
+print(datos_input.isna().sum())
 
 
 # Una vez finalizado este proceso, se puede considerar que los datos estan depurados. Los guardamos
-datosVinoDep = pd.concat([varObjBin, varObjCont, datos_input], axis = 1)
-with open('datosVinoDep.pickle', 'wb') as archivo:
-    pickle.dump(datosVinoDep, archivo)
-
-    
-    
-    
-    
+datosElecciones = pd.concat([varObjBin, varObjCont, datos_input], axis = 1)
+with open('datosElecciones.pickle', 'wb') as archivo:
+    pickle.dump(datosElecciones, archivo)
