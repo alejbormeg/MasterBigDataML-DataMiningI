@@ -289,9 +289,10 @@ def Vcramer(v, target):
 
     if target.dtype == 'float64' or target.dtype == 'int64':
         # Si target es numérica, la discretiza en intervalos y rellena los valores faltantes
-        p = sorted(list(set(target.quantile([0, 0.2, 0.4, 0.6, 0.8, 1.0]))))
-        target = pd.cut(target, bins=p)
-        target = target.fillna(target.min())
+        if len(set(target)) > 2:
+            p = sorted(list(set(target.quantile([0, 0.2, 0.4, 0.6, 0.8, 1.0]))))
+            target = pd.cut(target, bins=p)
+            target = target.fillna(target.min())
 
     # Calcula una tabla de contingencia entre v y target
     tabla_cruzada = pd.crosstab(v, target)
@@ -299,6 +300,7 @@ def Vcramer(v, target):
     # Calcula el chi-cuadrado y el coeficiente V de Cramer
     chi2 = chi2_contingency(tabla_cruzada)[0]
     n = tabla_cruzada.sum().sum()
+    
     v_cramer = np.sqrt(chi2 / (n * (min(tabla_cruzada.shape) - 1)))
 
     return v_cramer
