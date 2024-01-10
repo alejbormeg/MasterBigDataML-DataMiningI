@@ -5,6 +5,7 @@ import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
 import pickle
+from sklearn.model_selection import train_test_split
 
 # Cargo las funciones que voy a utilizar
 from FuncionesMineria import (analizar_variables_categoricas, cuentaDistintos, frec_variables_num, 
@@ -168,7 +169,7 @@ datos_input = datos_input.drop(eliminar, axis = 1)
 # Imputo todas las cuantitativas, seleccionar el tipo de imputacion: media, mediana o aleatorio
 for x in numericas_input:
     simetria = datos_input[x].skew()
-    if simetria >= 0:
+    if simetria == 0:
         datos_input[x] = ImputacionCuant(datos_input[x], 'media')
     else:
         datos_input[x] = ImputacionCuant(datos_input[x], 'mediana')
@@ -228,10 +229,10 @@ mosaico_targetbinaria(datos_input['CCAA'], varObjBin, 'Comunidades Autonomas')
 
 # Veo graficamente el efecto de dos variables cuantitativas sobre la binaria
 boxplot_targetbinaria(datos_input['SameComAutonPtge'], varObjBin, 'Porcentaje de ciudadanos que reside')
-boxplot_targetbinaria(datos_input['totalEmpresas'], varObjBin, 'Total Empresas')
+boxplot_targetbinaria(datos_input['Age_over65_pct'], varObjBin, 'Porcentaje mayores 65 años')
 
 hist_targetbinaria(datos_input['SameComAutonPtge'], varObjBin, 'Porcentaje de ciudadanos que reside')
-hist_targetbinaria(datos_input['totalEmpresas'], varObjBin, 'Total Empresas')
+hist_targetbinaria(datos_input['Age_over65_pct'], varObjBin, 'Porcentaje mayores 65 años')
 
 # Correlación entre todas las variables numéricas frente a la objetivo continua.
 # Obtener las columnas numéricas del DataFrame 'datos_input'
@@ -271,22 +272,29 @@ x_train, x_test, y_train, y_test = train_test_split(datos_input, np.ravel(varObj
 
 # Construyo un modelo preliminar con todas las variables (originales)
 # Indico la tipología de las variables (numéricas o categóricas)
-var_cont1 = ['Acidez', 'AcidoCitrico', 'Azucar', 'CloruroSodico', 'Densidad', 'pH', 'Sulfatos', 
-             'Alcohol', 'PrecioBotella']
-var_categ1 = ['Etiqueta', 'CalifProductor', 'Clasificacion', 'Region', 'prop_missings']
+# Separate numeric and categorical variables
+var_cont1 = []
+var_categ1 = []
+
+for column in datos_input.columns:
+    if pd.api.types.is_numeric_dtype(datos_input[column]):
+        var_cont1.append(column)
+    elif pd.api.types.is_categorical_dtype(datos_input[column]) or pd.api.types.is_string_dtype(datos_input[column]):
+        if(column != 'prop_missings'):
+            var_categ1.append(column)
 
 # Creo el modelo
 modelo1 = lm(y_train, x_train, var_cont1, var_categ1)
 # Visualizamos los resultado del modelo
-modelo1['Modelo'].summary()
+print(modelo1['Modelo'].summary())
 
 # Calculamos la medida de ajuste R^2 para los datos de entrenamiento
-Rsq(modelo1['Modelo'], y_train, modelo1['X'])
+print(Rsq(modelo1['Modelo'], y_train, modelo1['X']))
 
 # Preparamos los datos test para usar en el modelo
 x_test_modelo1 = crear_data_modelo(x_test, var_cont1, var_categ1)
 # Calculamos la medida de ajuste R^2 para los datos test
-Rsq(modelo1['Modelo'], y_test, x_test_modelo1)
+print(Rsq(modelo1['Modelo'], y_test, x_test_modelo1))
 
 
 # Nos fijamos en la importancia de las variables
