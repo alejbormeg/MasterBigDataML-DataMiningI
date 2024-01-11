@@ -702,6 +702,36 @@ def lm(varObjCont, datos, var_cont, var_categ, var_interac=[]):
 
     return output
 
+def lm_custom(varObjCont, datos, var_cont, var_categ, var_interac=[]):
+    """
+    Ajusta un modelo de regresión lineal a los datos y devuelve información relacionada con el modelo.
+
+    Parámetros:
+    varObjCont (Series o array): La variable objetivo continua que se está tratando de predecir.
+    datos (DataFrame): DataFrame de datos que contiene las variables de entrada.
+    var_cont (lista): Lista de nombres de variables continuas.
+    var_categ (lista): Lista de nombres de variables categóricas.
+    var_interac (lista, opcional): Lista de pares de variables para la interacción (por defecto es una lista vacía).
+
+    Returns:
+    dict: Un diccionario que contiene información relacionada con el modelo ajustado, incluyendo el modelo en sí,
+          las listas de variables continuas y categóricas, las variables de interacción (si se especifican) 
+          y el DataFrame X utilizado para realizar el modelo.
+
+    """
+
+    # Ajusta un modelo de regresión lineal a los datos y almacena la información del modelo en 'Modelo'.
+    output = {
+        'Modelo': sm.OLS(varObjCont, sm.add_constant(datos)).fit(),
+        'Variables': {
+            'cont': var_cont,
+            'categ': var_categ,
+            'inter': var_interac
+        },
+        'X': datos
+    }
+
+    return output
 
 # Funcion para hacer validacion cruzada a variable respuesta continua
 def validacion_cruzada_lm(n_cv, datos, varObjCont, var_cont, var_categ, var_interac=[]):
@@ -788,6 +818,64 @@ def modelEffectSizes(modelo, varObjCont, datos, var_cont, var_categ, var_interac
 
     return aportacion_r2
 
+def modelEffectSizes_custom(modelo_completo, varObjCont, datos, var_cont, var_categ, var_interac=[]):
+    """
+    Calcula las aportaciones al R-squared de las variables en un modelo y las presenta gráficamente.
+
+    Parámetros:
+    modelo (dict): Diccionario que contiene un modelo y otras informaciones relacionadas.
+    varObjCont (Series o array): La variable objetivo continua.
+    datos (DataFrame): El DataFrame de datos que contiene las variables de entrada.
+    var_cont (lista): Lista de nombres de variables continuas.
+    var_categ (lista): Lista de nombres de variables categóricas.
+    var_interac (lista, opcional): Lista de pares de variables para la interacción (por defecto es una lista vacía).
+
+    Returns:
+    DataFrame: Un DataFrame que muestra las aportaciones al R-squared de las variables y sus nombres.
+    """
+
+    # Crea un modelo completo y calcula su R-squared
+    r2_completo = Rsq(modelo_completo['Modelo'], varObjCont, modelo_completo['X'])
+    
+    # Inicializa listas para almacenar nombres de variables y sus aportaciones al R-squared
+    variables = []
+    r2 = []
+
+    # Calcula la aportación al R-squared de las variables continuas
+    for x in var_cont:
+        variables.append(x)
+        var = [v for v in var_cont if v != x]
+        modelo2 = lm(varObjCont, datos, var, var_categ, var_interac)
+        r2.append(r2_completo - Rsq(modelo2['Modelo'], varObjCont, modelo2['X']))
+
+    # Calcula la aportación al R-squared de las variables categóricas
+    for x in var_categ:
+        variables.append(x)
+        var = [v for v in var_categ if v != x]
+        modelo2 = lm(varObjCont, datos, var_cont, var, var_interac)
+        r2.append(r2_completo - Rsq(modelo2['Modelo'], varObjCont, modelo2['X']))    
+
+    # Calcula la aportación al R-squared de las variables de interacción
+    for x in var_interac:
+        variables.append(x[0] + '_' + x[1])
+        var = [v for v in var_interac if v != x]
+        modelo2 = lm(varObjCont, datos, var_cont, var_categ, var)
+        r2.append(r2_completo - Rsq(modelo2['Modelo'], varObjCont, modelo2['X']))    
+
+    # Crea un DataFrame con las aportaciones y lo ordena por valor de R-squared
+    aportacion_r2 = pd.DataFrame({
+        'Variables': variables,
+        'R2': r2
+    })
+    aportacion_r2 = aportacion_r2.sort_values('R2')
+
+    # Muestra un gráfico de barras para visualizar las aportaciones
+    plt.figure(figsize=(10, 6))
+    plt.barh(aportacion_r2['Variables'], aportacion_r2['R2'], color='skyblue')
+    plt.xlabel('Aportacion R2')
+    plt.show()
+
+    return aportacion_r2
 
 def impVariablesLog(modelo, varObjBin, datos, var_cont, var_categ, var_interac = []):
     """

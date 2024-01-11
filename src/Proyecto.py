@@ -9,7 +9,7 @@ from sklearn.model_selection import train_test_split
 
 # Cargo las funciones que voy a utilizar
 from FuncionesMineria import (analizar_variables_categoricas, cuentaDistintos, frec_variables_num, 
-                           atipicosAmissing, patron_perdidos, ImputacionCuant, ImputacionCuali)
+                           atipicosAmissing, patron_perdidos, ImputacionCuant, ImputacionCuali, lm_custom)
 
 # Cargo los datos
 datos = pd.read_excel('src/data/DatosEleccionesEspana.xlsx')
@@ -169,7 +169,7 @@ datos_input = datos_input.drop(eliminar, axis = 1)
 # Imputo todas las cuantitativas, seleccionar el tipo de imputacion: media, mediana o aleatorio
 for x in numericas_input:
     simetria = datos_input[x].skew()
-    if simetria == 0:
+    if simetria < 1:
         datos_input[x] = ImputacionCuant(datos_input[x], 'media')
     else:
         datos_input[x] = ImputacionCuant(datos_input[x], 'mediana')
@@ -191,7 +191,7 @@ with open('datosEleccionesDep.pickle', 'wb') as archivo:
 # Cargo las funciones que voy a utilizar despues
 from FuncionesMineria import (graficoVcramer, mosaico_targetbinaria, boxplot_targetbinaria, 
                            hist_targetbinaria, Transf_Auto, lm, Rsq, validacion_cruzada_lm,
-                           modelEffectSizes, crear_data_modelo, Vcramer)
+                           modelEffectSizes, modelEffectSizes_custom, crear_data_modelo, Vcramer)
 
 # Parto de los datos ya depurados
 with open('datosEleccionesDep.pickle', 'rb') as f:
@@ -267,9 +267,6 @@ with open('todo_cont.pickle', 'wb') as archivo:
 
 ## Comenzamos con la regresion lineal
 
-# Obtengo la particion
-x_train, x_test, y_train, y_test = train_test_split(datos_input, np.ravel(varObjCont), test_size = 0.2, random_state = 123456)
-
 # Construyo un modelo preliminar con todas las variables (originales)
 # Indico la tipología de las variables (numéricas o categóricas)
 # Separate numeric and categorical variables
@@ -283,22 +280,40 @@ for column in datos_input.columns:
         if(column != 'prop_missings'):
             var_categ1.append(column)
 
+# Obtengo la particion a partir de los datos depurados
+datos_modelo = crear_data_modelo(datos_input, var_cont1, var_categ1)
+
+var_cont1 = []
+var_categ1 = []
+
+for column in datos_modelo.columns:
+    if pd.api.types.is_numeric_dtype(datos_modelo[column]):
+        var_cont1.append(column)
+    elif pd.api.types.is_categorical_dtype(datos_modelo[column]) or pd.api.types.is_string_dtype(datos_modelo[column]):
+        if(column != 'prop_missings'):
+            var_categ1.append(column)
+
+x_train, x_test, y_train, y_test = train_test_split(datos_modelo, np.ravel(varObjCont), test_size = 0.2, random_state = 123456)
+
 # Creo el modelo
-modelo1 = lm(y_train, x_train, var_cont1, var_categ1)
+# Prepara los datos para el modelo, incluyendo la codificación de variables categóricas y la creación de interacciones.
+
+modelo1 = lm_custom(y_train, x_train, var_cont1, var_categ1)
+
 # Visualizamos los resultado del modelo
 print(modelo1['Modelo'].summary())
 
 # Calculamos la medida de ajuste R^2 para los datos de entrenamiento
 print(Rsq(modelo1['Modelo'], y_train, modelo1['X']))
 
-# Preparamos los datos test para usar en el modelo
-x_test_modelo1 = crear_data_modelo(x_test, var_cont1, var_categ1)
+# # Preparamos los datos test para usar en el modelo
+# x_test_modelo1 = crear_data_modelo(x_test, var_cont1, var_categ1)
 # Calculamos la medida de ajuste R^2 para los datos test
-print(Rsq(modelo1['Modelo'], y_test, x_test_modelo1))
+print(Rsq(modelo1['Modelo'], y_test, x_test))
 
 
 # Nos fijamos en la importancia de las variables
-modelEffectSizes(modelo1, y_train, x_train, var_cont1, var_categ1)
+print(modelEffectSizes_custom(modelo1, y_train, x_train, var_cont1, var_categ1))
 
 
 # Vamos a probar un modelo con menos variables. Recuerdo el grafico de Cramer
