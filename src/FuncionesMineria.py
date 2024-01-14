@@ -756,6 +756,28 @@ def validacion_cruzada_lm(n_cv, datos, varObjCont, var_cont, var_categ, var_inte
     # Realiza la validación cruzada utilizando un modelo de regresión lineal y puntajes R-squared.
     return list(cross_val_score(LinearRegression(), datos, varObjCont, cv=n_cv, scoring='r2'))
 
+# Funcion para hacer validacion cruzada a variable respuesta continua
+def validacion_cruzada_lm_custom(n_cv, datos, varObjCont, var_cont, var_categ, var_interac=[]):
+    """
+    Realiza la validación cruzada de un modelo de regresión lineal y devuelve una lista de puntajes R-squared.
+
+    Parámetros:
+    n_cv (int): El número de divisiones para la validación cruzada (k-fold).
+    datos (DataFrame): El DataFrame de datos que contiene las variables de entrada.
+    varObjCont (Series o array): La variable objetivo continua que se está tratando de predecir.
+    var_cont (lista): Lista de nombres de variables continuas.
+    var_categ (lista): Lista de nombres de variables categóricas.
+    var_interac (lista, opcional): Lista de pares de variables para la interacción (por defecto es una lista vacía).
+
+    Returns:
+    list: Una lista de puntajes R-squared obtenidos en cada fold de la validación cruzada.
+    """
+    
+    # Prepara los datos para el modelo, incluyendo la codificación de variables categóricas y la creación de interacciones.
+    datos = crear_data_modelo(datos, var_cont, var_categ, var_interac)
+
+    # Realiza la validación cruzada utilizando un modelo de regresión lineal y puntajes R-squared.
+    return list(cross_val_score(LinearRegression(), datos, varObjCont, cv=n_cv, scoring='r2'))
 
 
 def modelEffectSizes(modelo, varObjCont, datos, var_cont, var_categ, var_interac=[]):

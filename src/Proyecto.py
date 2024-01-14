@@ -11,6 +11,8 @@ from sklearn.model_selection import train_test_split
 from FuncionesMineria import (analizar_variables_categoricas, cuentaDistintos, frec_variables_num, 
                            atipicosAmissing, patron_perdidos, ImputacionCuant, ImputacionCuali, lm_custom)
 
+import random
+
 # Cargo los datos
 datos = pd.read_excel('src/data/DatosEleccionesEspana.xlsx')
 
@@ -319,35 +321,45 @@ print(modelEffectSizes_custom(modelo1, y_train, x_train, var_cont1, var_categ1))
 # Vamos a probar un modelo con menos variables. Recuerdo el grafico de Cramer
 graficoVcramer(datos_input, varObjCont) # Pruebo con las mas importantes
 
-# Construyo el segundo modelo
-var_cont2 = []
-var_categ2 = ['Etiqueta', 'CalifProductor', 'Clasificacion','prop_missings']
+# Construyo el segundo modelo con las 5 con mayor V cramer + Densidad + Actividad ppal
+# Columns to include
+included_columns = ["ComercTTEHosteleria", "Servicios", "Construccion", "Industria"]
+var_cont2 = x_train.filter(regex='^(CCAA_|Densidad_|ActividadPpal_)|' + '|'.join(included_columns)).columns.tolist()
+var_categ2 = []
 modelo2 = lm(y_train, x_train, var_cont2, var_categ2)
-modelEffectSizes(modelo2, y_train, x_train, var_cont2, var_categ2)
-modelo2['Modelo'].summary()
-Rsq(modelo2['Modelo'], y_train, modelo2['X'])
+print(modelo2['Modelo'].summary())
+print(Rsq(modelo2['Modelo'], y_train, modelo2['X']))
 x_test_modelo2 = crear_data_modelo(x_test, var_cont2, var_categ2)
-Rsq(modelo2['Modelo'], y_test, x_test_modelo2)
+print(Rsq(modelo2['Modelo'], y_test, x_test_modelo2))
+print(modelEffectSizes_custom(modelo2, y_train, x_train, var_cont2, var_categ2))
+
 
 # Pruebo un modelo con menos variables, basandome en la importancia de las variables
-var_cont3 = []
-var_categ3 = ['Etiqueta', 'CalifProductor', 'Clasificacion']
-modelo3 = lm(y_train, x_train, var_cont3, var_categ3)
-modelo3['Modelo'].summary()
-Rsq(modelo3['Modelo'], y_train, modelo3['X'])
-x_test_modelo3 = crear_data_modelo(x_test, var_cont3, var_categ3)
-Rsq(modelo3['Modelo'], y_test, x_test_modelo3)
+# Number of columns to randomly select
+num_columns_to_select = 3
 
-# Pruebo con una interaccion sobre el anterior
-# Se podrian probar todas las interacciones dos a dos
-var_cont4 = []
-var_categ4 = ['Etiqueta', 'CalifProductor', 'Clasificacion']
-var_interac4 = [('Clasificacion', 'Etiqueta')]
-modelo4 = lm(y_train, x_train, var_cont4, var_categ4, var_interac4)
-modelo4['Modelo'].summary()
-Rsq(modelo4['Modelo'], y_train, modelo4['X'])
-x_test_modelo4 = crear_data_modelo(x_test, var_cont4, var_categ4, var_interac4)
-Rsq(modelo4['Modelo'], y_test, x_test_modelo4)
+# Randomly select column names
+random_columns = x_train.columns.tolist()
+selected_columns = random.sample(random_columns, k=num_columns_to_select)
+var_cont3 = selected_columns
+var_categ3 = []
+modelo3 = lm(y_train, x_train, var_cont3, var_categ3)
+print(modelo3['Modelo'].summary())
+print(Rsq(modelo3['Modelo'], y_train, modelo3['X']))
+x_test_modelo3 = crear_data_modelo(x_test, var_cont3, var_categ3)
+print(Rsq(modelo3['Modelo'], y_test, x_test_modelo3))
+print(modelEffectSizes_custom(modelo3, y_train, x_train, var_cont3, var_categ3))
+
+# # Pruebo con una interaccion sobre el anterior
+# # Se podrian probar todas las interacciones dos a dos
+# var_cont4 = []
+# var_categ4 = ['Etiqueta', 'CalifProductor', 'Clasificacion']
+# var_interac4 = [('Clasificacion', 'Etiqueta')]
+# modelo4 = lm(y_train, x_train, var_cont4, var_categ4, var_interac4)
+# modelo4['Modelo'].summary()
+# Rsq(modelo4['Modelo'], y_train, modelo4['X'])
+# x_test_modelo4 = crear_data_modelo(x_test, var_cont4, var_categ4, var_interac4)
+# Rsq(modelo4['Modelo'], y_test, x_test_modelo4)
 
 
 # Hago validacion cruzada repetida para ver que modelo es mejor
@@ -364,19 +376,20 @@ for rep in range(20):
     modelo1VC = validacion_cruzada_lm(5, x_train, y_train, var_cont1, var_categ1)
     modelo2VC = validacion_cruzada_lm(5, x_train, y_train, var_cont2, var_categ2)
     modelo3VC = validacion_cruzada_lm(5, x_train, y_train, var_cont3, var_categ3)
-    modelo4VC = validacion_cruzada_lm(5, x_train, y_train, var_cont4, var_categ4, var_interac4)
+    # modelo4VC = validacion_cruzada_lm(5, x_train, y_train, var_cont4, var_categ4, var_interac4)
     
     # Crea un DataFrame con los resultados de validación cruzada para esta repetición
     results_rep = pd.DataFrame({
-        'Rsquared': modelo1VC + modelo2VC + modelo3VC + modelo4VC,
-        'Resample': ['Rep' + str((rep + 1))] * 5 * 4,  # Etiqueta de repetición
-        'Modelo': [1] * 5 + [2] * 5 + [3] * 5 + [4] * 5  # Etiqueta de modelo (1, 2, 3 o 4)
+        'Rsquared': modelo1VC + modelo2VC + modelo3VC,
+        'Resample': ['Rep' + str((rep + 1))] * 5 * 3,  # Etiqueta de repetición
+        'Modelo': [1] * 5 + [2] * 5 + [3] * 5 # Etiqueta de modelo (1, 2, 3 o 4)
     })
     
     # Concatena los resultados de esta repetición al DataFrame principal 'results'
     results = pd.concat([results, results_rep], axis=0)
 
-    
+print(results)
+
 # Boxplot de la validación cruzada
 plt.figure(figsize=(10, 6))  # Crea una figura de tamaño 10x6
 plt.grid(True)  # Activa la cuadrícula en el gráfico
@@ -399,16 +412,15 @@ print(media_r2)
 std_r2 = results.groupby('Modelo')['Rsquared'].std()
 print(std_r2)
 # Contar el número de parámetros en cada modelo
-num_params = [len(modelo1['Modelo'].params), len(modelo2['Modelo'].params), 
-             len(modelo3['Modelo'].params), len(modelo4['Modelo'].params)]
+num_params = [len(modelo1['Modelo'].params), len(modelo2['Modelo'].params)]
 
 # Teniendo en cuenta el R2, la estabilidad y el numero de parametros, nos quedamos con el modelo3
 # Vemos los coeficientes del modelo ganador
-modelo3['Modelo'].summary()
+modelo2['Modelo'].summary()
 
 # Evaluamos la estabilidad del modelo a partir de las diferencias en train y test:
-Rsq(modelo3['Modelo'], y_train, modelo3['X'])
-Rsq(modelo3['Modelo'], y_test, x_test_modelo3)
+Rsq(modelo2['Modelo'], y_train, modelo2['X'])
+Rsq(modelo2['Modelo'], y_test, x_test_modelo2)
 
 # Vemos las variables mas importantes del modelo ganador
-modelEffectSizes(modelo3, y_train, x_train, var_cont3, var_categ3)
+modelEffectSizes(modelo2, y_train, x_train, var_cont2, var_categ2)
