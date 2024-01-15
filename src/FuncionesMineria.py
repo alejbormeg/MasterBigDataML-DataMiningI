@@ -993,7 +993,33 @@ def glm(varObjBin, datos, var_cont, var_categ, var_interac = []):
     
     return output
 
+def glm_custom(varObjBin, datos, var_cont, var_categ, var_interac = []):
+    """
+    Ajusta un modelo de regresión logística a datos binarios.
 
+    Parameters:
+        varObjBin (array-like): Variable objetivo binaria.
+        datos (DataFrame): Conjunto de datos que incluye las variables predictoras.
+        var_cont (list): Lista de nombres de variables continuas.
+        var_categ (list): Lista de nombres de variables categóricas.
+        var_interac (list, opcional): Lista de interacciones entre variables (por defecto es una lista vacía)..
+
+    Returns:
+        dict: Un diccionario que contiene el modelo ajustado, las variables utilizadas y el conjunto de datos utilizado en la predicción.
+    """
+
+    # Crear un modelo de regresión logística y ajustarlo a los datos
+    output = {
+        'Modelo': LogisticRegression(max_iter=1000, solver='newton-cg').fit(datos, varObjBin),
+        'Variables': {
+            'cont': var_cont,
+            'categ': var_categ,
+            'inter': var_interac
+        },
+        'X': datos
+    }
+    
+    return output
 
 def summary_glm(modelo, varObjBin, datos):
     """
