@@ -89,18 +89,401 @@ En última instancia, este estudio busca proporcionar información valiosa para 
 
 ## 2. Importación del conjunto de datos y asignación correcta de los tipos de variables.
 
+La base de datos se guarda en la carpeta `src/data` y se realiza la importación del conjunto de datos con la librería `Pandas` de Python. Una vez hecho esto eliminamos las variables objetivo relacionadas con el porcentaje de Izquierda, Derecha y otros, tanto continuas como categóricas:
+
+```python
+# Cargo los datos
+datos = pd.read_excel('src/data/DatosEleccionesEspana.xlsx')
+
+# Eliminamos las variables que no usaremos
+variables_a_eliminar = ["Izda_Pct", "Dcha_Pct", "Otros_Pct", "Izquierda", "Derecha"]
+
+datos = datos.drop(columns=variables_a_eliminar)
+```
+
+Comprobamos que todas las variables tienen los tipos correctos ejecutando: 
+
+```python
+print(datos.dtypes)
+```
+Obteniendo:
+
+```bash
+Name                             object
+CodigoProvincia                   int64
+CCAA                             object
+Population                        int64
+TotalCensus                       int64
+AbstentionPtge                  float64
+AbstencionAlta                    int64
+Age_0-4_Ptge                    float64
+Age_under19_Ptge                float64
+Age_19_65_pct                   float64
+Age_over65_pct                  float64
+WomanPopulationPtge             float64
+ForeignersPtge                  float64
+SameComAutonPtge                float64
+SameComAutonDiffProvPtge        float64
+DifComAutonPtge                 float64
+UnemployLess25_Ptge             float64
+Unemploy25_40_Ptge              float64
+UnemployMore40_Ptge             float64
+AgricultureUnemploymentPtge     float64
+IndustryUnemploymentPtge        float64
+ConstructionUnemploymentPtge    float64
+ServicesUnemploymentPtge        float64
+totalEmpresas                   float64
+Industria                       float64
+Construccion                    float64
+ComercTTEHosteleria             float64
+Servicios                       float64
+ActividadPpal                    object
+inmuebles                       float64
+Pob2010                         float64
+SUPERFICIE                      float64
+Densidad                         object
+PobChange_pct                   float64
+PersonasInmueble                float64
+Explotaciones                     int64
+
+```
+
+Como vemos, las variables categóricas (Name, CCAA, ActividadPpal, Densidad) tienen el tipo `object` correctamente, mientras que las demás son numéricas todas, algunas enteros y otras en coma flotante.
+
 ## 3. Análisis descriptivo del conjunto de datos.
-   - Número de observaciones
-   - Número y naturaleza de variables
-   - Datos erróneos, etc.
+
+Ejecutando `datos.shape` observamos que las dimensiones del dataframe cargado son de `(8119, 36)`, lo que implica un total de 8119 ejemplos en la base de datos y un total de 36 variables (incluyendo las variables objetivo) que analizar y limpiar.
+
+Separamos las variables en variables numéricas y categóricas:
+
+```python
+# Seleccionar las columnas numéricas del DataFrame
+numericas = datos.select_dtypes(include=['int', 'int32', 'int64','float', 'float32', 'float64']).columns
+
+# Seleccionar las columnas categóricas del DataFrame
+categoricas = [variable for variable in variables if variable not in numericas]
+```
+
+Obtenemos un total de 32 variables numéricas y 4 categóricas. Tras esto procedemos a un análisis más exhaustivo de las distintas variables. 
+
+### Análisis variables categóricas
+
+Para las variables categóricas emplearemos la función `analizar_variables_categoricas` del fichero `src/FuncionesMineria.py`. Esta función nos devuelve para cada variable categórica el número de ocurrencias para cada categoría así como el porcentaje que representa dentro del total de datos:
+
+```python
+# Frecuencias de los valores en las variables categóricas
+analisis_categoricas = analizar_variables_categoricas(datos)
+
+print(analisis_categoricas)
+```
+
+El resultado obtenido es el siguiente:
+
+```bash
+{'Name':           n         %
+La Zarza           2  0.000246
+Sada               2  0.000246
+Castejón           2  0.000246
+Moya               2  0.000246
+Rebollar           2  0.000246
+...               ..       ...
+Navia de Suarna    1  0.000123
+Muras              1  0.000123
+Monterroso         1  0.000123
+Monforte de Lemos  1  0.000123
+Zuñeda             1  0.000123
+
+[8102 rows x 2 columns], 
+'CCAA':          n         %
+CastillaLeón    2248  0.276881
+Cataluña         947  0.116640
+CastillaMancha   919  0.113191
+Andalucía        773  0.095209
+Aragón           731  0.090036
+ComValenciana    542  0.066757
+Extremadura      387  0.047666
+Galicia          314  0.038675
+Navarra          272  0.033502
+PaísVasco        251  0.030915
+Madrid           179  0.022047
+Rioja            174  0.021431
+Cantabria        102  0.012563
+Canarias          88  0.010839
+Asturias          78  0.009607
+Baleares          67  0.008252
+Murcia            45  0.005543
+Ceuta              1  0.000123
+Melilla            1  0.000123, 
+'ActividadPpal':      n         %
+Otro                 4932  0.607464
+ComercTTEHosteleria  2540  0.312846
+Servicios             620  0.076364
+Construccion           14  0.001724
+Industria              13  0.001601, 
+'Densidad': n         %
+MuyBaja  6417  0.790368
+Baja     1053  0.129696
+Alta      557  0.068605
+?          92  0.011331
+}
+```
+
+De aquí podemos extraer las siguientes conclusiones:
+
+- La variable "Name" suele presentar una única ocurrencia por clase, a excepción de algunos municipios que presentan 2 ocurrencias, esto no se trata de duplicados pues analizando los ejemplos encontramos casos como el del municipio de La Zarza que en España existe un municipio con ese nombre en Castilla y León y en Extremadura, o Sada en Galicia y Navarra.
+
+- La variable "CCAA" presenta clases con una gran representación en el dataset (como es el caso de Castilla y León con el 27,6% de ocurrencias) y otras con una representación muy baja como son Ceuta y Melilla con unicamente una ocurrencia (pues se tratan de ciudades autonómicas). Esto implicará en futuros procesos agrupar de alguna forma las clases poco representadas.
+
+- La variable "ActividadPpal" presenta 5 posibles valores ("Otro", "ComercTTEHosteleria", "Servicios", "Construccion", "Industria"). Estas clases parecen correctas aunque en el caso de Construccion e Industria se encuentran poco representadas.
+
+- La variable "Densidad" presenta 4 posibles valores ("MuyBaja", "Baja", "Alta", "?") y detectamos un error, pues para representar los valores perdidos emplean "?" lo cual va a suponer una transformación en estos datos para procesarlos correctamente.
+
+### Análisis de variables numéricas
+
+<!-- En primer lugar, para cada variable numérica, vemos la cantidad de ocurrencias por valor, con el objetivo de ver si es posible transformar alguna de estas a categórica. para ello empleamos la función `cuentaDistintos` del fichero `src/FuncionesMineria.py`. Observamos que a excepción de la variable "AbstencionAlta" (que solo toma dos valores 1 y 0) y "CodigoProvincia" (que toma 52 valores distintos) las demás no vale la pena considerarlas categóricas. No obstante una de ellas se trata de variable o -->
+
+Para el análisis de las variables numéricas ejecutamos el siguiente código:
+
+```python
+# Descriptivos variables numéricas mediante función describe() de Python
+descriptivos_num = datos.describe().T
+
+# Añadimos más descriptivos a los anteriores
+for num in numericas:
+    descriptivos_num.loc[num, "Asimetria"] = datos[num].skew()
+    descriptivos_num.loc[num, "Kurtosis"] = datos[num].kurtosis()
+    descriptivos_num.loc[num, "Rango"] = np.ptp(datos[num].dropna().values)
+
+print(descriptivos_num)
+```
+
+Obteniendo los siguientes resultados:
+
+| Variable                      | Count  | Mean      | Std        | Min     | 25%     | 50%     | 75%     | Max      | Asimetria | Kurtosis  | Rango       |
+|-------------------------------|--------|-----------|------------|---------|---------|---------|---------|----------|-----------|-----------|-------------|
+| CodigoProvincia               | 8119.0 | 26.67     | 14.90      | 1.00    | 13.00   | 26.00   | 41.00   | 52.00    | 0.01      | -1.32     | 51.00       |
+| Population                    | 8119.0 | 5741.85   | 46215.20   | 5.00    | 166.00  | 549.00  | 2427.50 | 3141991.00 | 45.99     | 2816.86   | 3141986.00  |
+| TotalCensus                   | 8119.0 | 4260.67   | 34428.89   | 5.00    | 140.00  | 447.00  | 1846.50 | 2363829.00 | 46.51     | 2890.84   | 2363824.00  |
+| AbstentionPtge                | 8119.0 | 26.51     | 7.54       | 0.00    | 21.68   | 26.43   | 31.48   | 57.58    | -0.05     | 0.50      | 57.58       |
+| AbstencionAlta                | 8119.0 | 0.31      | 0.46       | 0.00    | 0.00    | 0.00    | 1.00    | 1.00     | 0.81      | -1.34     | 1.00        |
+| Age_0-4_Ptge                  | 8119.0 | 3.02      | 2.05       | 0.00    | 1.39    | 2.98    | 4.53    | 13.25    | 0.34      | -0.21     | 13.25       |
+| Age_under19_Ptge              | 8119.0 | 13.57     | 6.78       | 0.00    | 8.33    | 13.89   | 19.06   | 33.70    | -0.10     | -0.79     | 33.70       |
+| Age_19_65_pct                 | 8119.0 | 57.37     | 6.82       | 23.46   | 53.85   | 58.66   | 61.82   | 100.00   | -0.81     | 2.16      | 76.54       |
+| Age_over65_pct                | 8119.0 | 29.07     | 11.75      | 0.00    | 19.82   | 27.56   | 36.91   | 76.47    | 0.60      | 0.08      | 76.47       |
+| WomanPopulationPtge           | 8119.0 | 47.30     | 4.36       | 11.77   | 45.73   | 48.49   | 50.00   | 72.68    | -1.67     | 5.80      | 60.92       |
+| ForeignersPtge                | 8119.0 | 5.62      | 7.35       | -8.96   | 1.06    | 3.59    | 8.18    | 71.47    | 2.50      | 11.35     | 80.43       |
+| SameComAutonPtge              | 8119.0 | 81.63     | 12.29      | 0.00    | 75.81   | 84.49   | 90.46   | 127.16   | -1.52     | 3.47      | 127.16      |
+| SameComAutonDiffProvPtge      | 8119.0 | 4.34      | 6.39       | 0.00    | 0.68    | 2.19    | 5.28    | 67.31    | 3.29      | 14.56     | 67.31       |
+| DifComAutonPtge               | 8119.0 | 10.73     | 8.85       | 0.00    | 4.93    | 8.27    | 13.90   | 100.00   | 2.43      | 9.66      | 100.00      |
+| UnemployLess25_Ptge           | 8119.0 | 7.32      | 9.41       | 0.00    | 0.00    | 5.88    | 10.47   | 100.00   | 4.15      | 31.66     | 100.00      |
+| Unemploy25_40_Ptge            | 8119.0 | 37.00     | 20.32      | 0.00    | 28.57   | 39.94   | 46.67   | 100.00   | 0.21      | 1.41      | 100.00      |
+| UnemployMore40_Ptge           | 8119.0 | 50.18     | 22.80      | 0.00    | 41.67   | 50.00   | 60.04   | 100.00   | -0.23     | 0.86      | 100.00      |
+| AgricultureUnemploymentPtge   | 8119.0 | 8.40      | 12.96      | 0.00    | 0.00    | 3.49    | 11.73   | 100.00   | 3.23      | 15.58     | 100.00      |
+| IndustryUnemploymentPtge      | 8119.0 | 10.01     | 12.53      | 0.00    | 0.00    | 7.14    | 14.29   | 100.00   | 3.09      | 16.05     | 100.00      |
+| ConstructionUnemploymentPtge  | 8119.0 | 10.84     | 13.28      | 0.00    | 0.00    | 8.33    | 14.29   | 100.00   | 3.09      | 14.62     | 100.00      |
+| ServicesUnemploymentPtge      | 8119.0 | 58.65     | 24.26      | 0.00    | 50.00   | 62.02   | 72.12   | 100.00   | -0.81     | 0.80      | 100.00      |
+| totalEmpresas                 | 8114.0 | 398.60    | 4219.37    | 0.00    | 7.00    | 30.00   | 147.00  | 299397.00 | 53.70     | 3474.99   | 299392.00   |
+| Industria                     | 7931.0 | 23.42     | 158.61     | 0.00    | 0.00    | 0.00    | 14.00   | 10521.00  | 44.27     | 2644.34   | 10520.00    |
+| Construccion                  | 7980.0 | 48.88     | 421.86     | 0.00    | 0.00    | 0.00    | 25.00   | 30343.00  | 52.58     | 3506.59   | 30343.00    |
+| ComercTTEHosteleria           | 8110.0 | 146.74    | 1233.02    | 0.00    | 0.00    | 0.00    | 65.00   | 80856.00  | 45.41     | 2649.23   | 80855.00    |
+| Servicios                     | 8057.0 | 172.15    | 2446.81    | 0.00    | 0.00    | 0.00    | 40.00   | 177677.00 | 57.50     | 3834.08   | 177677.00   |
+| inmuebles                     | 7981.0 | 3246.16   | 24314.71   | 6.00    | 180.00  | 486.00  | 1589.00 | 1615548.00 | 44.55     | 2645.97   | 1615542.00  |
+| Pob2010                       | 8112.0 | 5795.81   | 47535.68   | 5.00    | 177.75  | 582.00  | 2483.00 | 3273049.00 | 47.17     | 2942.10   | 3273044.00  |
+| SUPERFICIE                    | 8110.0 | 6214.70   | 9218.19    | 2.58    | 1839.19 | 3487.74 | 6893.88 | 175022.91 | 6.07      | 62.34     | 175020.33   |
+| PobChange_pct                 | 8112.0 | -4.90     | 10.38      | -52.27  | -10.40  | -4.96   | 0.09    | 138.46   | 1.51      | 15.10     | 190.73      |
+| PersonasInmueble              | 7981.0 | 1.30      | 0.57       | 0.11    | 0.85    | 1.25    | 1.73    | 3.33     | 0.26      | -0.63     | 3.22        |
+| Explotaciones                 | 8119.0 | 2447.20   | 15062.74   | 1.00    | 22.00   | 52.00   | 137.00  | 99999.00  | 6.32      | 37.99     | 99998.00    |
+
+Todos los resultados parecen estar dentro de la normalidad a excepción de: 
+
+- Para la variable "Explotaciones" el valor máximo que se indica es de 99999.00, lo cual parece incorrecto y podría estar refiríendose a valores perdidos.
+
+- Las variables "ForeignersPtge", "SameComAutonPtge" y "PobChange_pct" presentan valores fuera de rango, como pueden observarse en sus valores máximos.
+
 
 ## 4. Corrección de los errores detectados.
 
+Para corregir los errores detectados ejecutamos el siguiente código: 
+
+```python
+# A veces los 'nan' vienen como como una cadena de caracteres, los modificamos a perdidos.
+for x in categoricas:
+    datos[x] = datos[x].replace('nan', np.nan) 
+
+# Missings no declarados variables cualitativas (NSNC, ?)
+datos['Densidad'] = datos['Densidad'].replace('?', np.nan)
+
+# Missings no declarados variables cuantitativas (-1, 99999)
+datos['Explotaciones'] = datos['Explotaciones'].replace(99999, np.nan)
+
+# Valores fuera de rango
+datos['ForeignersPtge'] = [x if 0 <= x <= 100 else np.nan for x in datos['ForeignersPtge']]
+datos['SameComAutonPtge'] = [x if 0 <= x <= 100 else np.nan for x in datos['SameComAutonPtge']]
+datos['PobChange_pct'] = [x if x <= 100 else np.nan for x in datos['PobChange_pct']]
+```
+
+Con esto corregimos todos los errores detectados en variables Numéricas y categóricas y convertimos los valores extraños a valores perdidos para un posterior tratamiento de los mismos.
+
 ## 5. Análisis de valores atípicos.
-   - Decisiones tomadas.
+Se realiza in recuento de los valores atípicos con la función `atipicosAmissing` del fichero `src/FuncionesMineria.py`, con dicha función, dependiendo de si la variable numérica que se analiza es simétrica o asimétrica se calculan los atípicos con la regla de la desviación típoca (si es simétrica) o con la Desviación Absoluta de la Mediana (MAD). Además se calculan posibles valores atípicos con la regla de los cuartiles. El código empleado s el siguiente: 
+
+```python
+# Cuento el porcentaje de atipicos de cada variable. 
+resultados = {x: atipicosAmissing(datos_input[x])[1] / len(datos_input) for x in numericas_input}
+```
+
+El resultado formateado es el siguiente:
+
+| Variable                      | Proporción de Atípicos     |
+|-------------------------------|-----------|
+| CodigoProvincia               | 0.0000    |
+| Population                    | 0.0993    |
+| TotalCensus                   | 0.0962    |
+| Age_0-4_Ptge                  | 0.0000    |
+| Age_under19_Ptge              | 0.0000    |
+| Age_19_65_pct                 | 0.0029    |
+| Age_over65_pct                | 0.0000    |
+| WomanPopulationPtge           | 0.0026    |
+| ForeignersPtge                | 0.0000    |
+| SameComAutonPtge              | 0.0000    |
+| SameComAutonDiffProvPtge      | 0.0203    |
+| DifComAutonPtge               | 0.0049    |
+| UnemployLess25_Ptge           | 0.0032    |
+| Unemploy25_40_Ptge            | 0.0000    |
+| UnemployMore40_Ptge           | 0.0000    |
+| AgricultureUnemploymentPtge   | 0.0200    |
+| IndustryUnemploymentPtge      | 0.0059    |
+| ConstructionUnemploymentPtge  | 0.0065    |
+| ServicesUnemploymentPtge      | 0.0000    |
+| totalEmpresas                 | 0.0000    |
+| Industria                     | 0.0000    |
+| Construccion                  | 0.0000    |
+| ComercTTEHosteleria           | 0.0000    |
+| Servicios                     | 0.0000    |
+| inmuebles                     | 0.0000    |
+| Pob2010                       | 0.0000    |
+| SUPERFICIE                    | 0.0000    |
+| PobChange_pct                 | 0.0081    |
+| PersonasInmueble              | 0.0000    |
+| Explotaciones                 | 0.0000    |
+
+Como podemos ver la mayoría de variables no presentan valores atípicos y las que los presentan son valores muy bajos, siendo el máximo 10% aproximadamente para la variable "Population" y "TotalCensus". Por ello resolvemos transformar todos los valores atípicos a valores perdidos con el siguiente código:
+
+```python
+# Modifico los atipicos como missings
+for x in numericas_input:
+    datos_input[x] = atipicosAmissing(datos_input[x])[0]
+```
 
 ## 6. Análisis de valores perdidos.
-   - Estrategias de imputación.
+
+Tras las transformaciones aplicadas y el tratamiento de valores atípicos, vamos a ver el total de valores perdidos por variable. Para ello ejecutamos el siguiente código:
+
+```python
+variables = list(datos.columns)  
+print(datos[variables].isna().sum())
+```
+
+El resultado es el siguiente:
+
+| Variable                      | Missing Values |
+|-------------------------------|-----------------|
+| CodigoProvincia               | 0               |
+| CCAA                          | 0               |
+| Population                    | 0               |
+| TotalCensus                   | 0               |
+| AbstentionPtge                | 0               |
+| AbstencionAlta                | 0               |
+| Age_0-4_Ptge                  | 0               |
+| Age_under19_Ptge              | 0               |
+| Age_19_65_pct                 | 0               |
+| Age_over65_pct                | 0               |
+| WomanPopulationPtge           | 0               |
+| ForeignersPtge                | 653             |
+| SameComAutonPtge              | 3               |
+| SameComAutonDiffProvPtge      | 0               |
+| DifComAutonPtge               | 0               |
+| UnemployLess25_Ptge           | 0               |
+| Unemploy25_40_Ptge            | 0               |
+| UnemployMore40_Ptge           | 0               |
+| AgricultureUnemploymentPtge   | 0               |
+| IndustryUnemploymentPtge      | 0               |
+| ConstructionUnemploymentPtge  | 0               |
+| ServicesUnemploymentPtge      | 0               |
+| totalEmpresas                 | 5               |
+| Industria                     | 188             |
+| Construccion                  | 139             |
+| ComercTTEHosteleria           | 9               |
+| Servicios                     | 62              |
+| ActividadPpal                 | 0               |
+| inmuebles                     | 138             |
+| Pob2010                       | 7               |
+| SUPERFICIE                    | 9               |
+| Densidad                      | 92              |
+| PobChange_pct                 | 9               |
+| PersonasInmueble              | 138             |
+| Explotaciones                 | 189             |
+
+"ForeignersPtge" muestra el máximo con 653, pero ninguna variable tiene una cantidad excesiva de valores perdidos en comparación con el conjunto total.
+
+![Missing values](./imgs/missings_correlation.png)
+
+Destacan correlaciones significativas entre algunas variables. Por ejemplo, la alta correlación de 0.97 entre "Population" y "TotalCensus" es lógica, ya que ambos representan conceptos similares en el contexto electoral, donde el censo deriva de la población local. También, la correlación perfecta de 1.0 entre "PersonasInmueble" y "Inmuebles" indica una dependencia directa entre ambas, siendo la primera derivada de la segunda.
+
+Además, se observan relaciones notables entre sectores económicos, como la correlación de 0.82 entre "Industria" y "Construccion," reflejando una estrecha relación sectorial. Otras correlaciones relevantes incluyen 0.85 entre "TotalEmpresas" y "Pob210," y 0.63 entre "ComercTTEHosteleria" y "Pob210," indicando posibles interacciones demográficas y económicas en el análisis territorial. Este análisis resalta conexiones sustanciales entre variables, proporcionando insights para comprender mejor la estructura de los datos y las relaciones subyacentes.
+
+A continuación creamos una nueva variable "prop_missings" para recoger la proporción de valores perdidos por cada observación, de cara a eliminar posibles observaciones con demasiados valores perdidos (más del 50%). Para ello usamos el siguiente código:
+
+```python
+datos_input['prop_missings'] = datos_input.isna().mean(axis = 1)
+
+# Elimino las observaciones con mas de la mitad de datos missings (no hay ninguna)
+eliminar = datos_input['prop_missings'] > 0.5
+datos_input = datos_input[~eliminar]
+varObjBin = varObjBin[~eliminar]
+varObjCont = varObjCont[~eliminar]
+
+# Transformo la nueva variable en categórica (ya que tiene pocos valores diferentes)
+datos_input["prop_missings"] = datos_input["prop_missings"].astype(str)
+```
+
+Estadísticas de la nueva variable:
+
+Número de observaciones (count): 8119.
+- Media (mean): 0.014306, lo que indica que, en promedio, alrededor del 1.43% de los datos están ausentes en cada observación.
+- Desviación estándar (std): 0.025718, señalando la variabilidad en la proporción de valores faltantes entre las observaciones.
+Valor mínimo (min): 0, ya que no hay ninguna observación sin valores faltantes.
+- Primer cuartil (25%): 0, indicando que el 25% de las observaciones tienen ningún valor faltante.
+- Mediana (50%): 0, denotando que la mitad de las observaciones tienen un 0% de valores faltantes.
+- Tercer cuartil (75%): 0.030303, revelando que el 75% de las observaciones tienen hasta un 3.03% de valores faltantes.
+- Valor máximo (max): 0.333333, que representa la proporción máxima de valores faltantes en una observación, equivalente al 33.33%
+
+Se opta por convertirla en categórica debido a los pocos valores distintos que toma.
+
+### Imputación de valores faltantes
+
+En el proceso de imputación de valores faltantes, se aborda tanto la imputación para variables cuantitativas como para variables cualitativas.
+
+#### Variables Cuantitativas:
+Para las variables cuantitativas, se evalúa la simetría de cada variable mediante su coeficiente de asimetría. Si la simetría es menor a 1, se realiza la imputación utilizando la media de la variable. En cambio, si la simetría es igual o mayor a 1, se opta por la imputación mediante la mediana. Esta distinción se basa en la forma de la distribución, buscando preservar la representatividad de los datos centrales. El código empleado es el siguiente: 
+
+```python
+for x in numericas_input:
+    simetria = datos_input[x].skew()
+    if simetria < 1:
+        datos_input[x] = ImputacionCuant(datos_input[x], 'media')
+    else:
+        datos_input[x] = ImputacionCuant(datos_input[x], 'mediana')
+```
+#### Variables Cualitativas:
+En el caso de las variables cualitativas, la imputación se lleva a cabo utilizando la moda, que representa el valor más frecuente en la variable. Esta elección se fundamenta en la naturaleza discreta de las variables cualitativas y en la búsqueda de preservar la tendencia central del conjunto de datos. El código empleado es el siguiente:
+
+```python
+for x in categoricas_input:
+    datos_input[x] = ImputacionCuali(datos_input[x], 'moda')
+```
+
+Finalmente, se realiza una verificación post-imputación para asegurar que no queden valores faltantes en el conjunto de datos resultante. Este procedimiento garantiza la coherencia y completitud de la información, preparando los datos para análisis subsiguientes.
 
 ## 7. Transformaciones de variables y relaciones con las variables objetivo.
 

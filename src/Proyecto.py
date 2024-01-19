@@ -6,6 +6,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import pickle
 from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import MinMaxScaler
 
 # Cargo las funciones que voy a utilizar
 from FuncionesMineria import (analizar_variables_categoricas, cuentaDistintos, frec_variables_num, 
@@ -22,12 +23,10 @@ variables_a_eliminar = ["Izda_Pct", "Dcha_Pct", "Otros_Pct", "Izquierda", "Derec
 datos = datos.drop(columns=variables_a_eliminar)
 
 # Comprobamos el tipo de formato de las variables variable que se ha asignado en la lectura.
-# No todas las categoricas estan como queremos
 print(datos.dtypes)
 
-# Las variables categoricas en un comienzo son: Name, CCAA, ActividadPpal, Densidad
-# El resto son todas continuas
-# Todas ellas tienen el tipo correcto.
+# Dimensiones del dataframe
+print(datos.shape)
 
 # Genera una lista con los nombres de las variables.
 variables = list(datos.columns)  
@@ -37,6 +36,8 @@ numericas = datos.select_dtypes(include=['int', 'int32', 'int64','float', 'float
 
 # Seleccionar las columnas categóricas del DataFrame
 categoricas = [variable for variable in variables if variable not in numericas]
+
+print(f"Numericas: {len(numericas)}, Categoricas: {len(categoricas)}")
 
 # Frecuencias de los valores en las variables categóricas
 analisis_categoricas = analizar_variables_categoricas(datos)
@@ -58,9 +59,6 @@ for num in numericas:
 
 print(descriptivos_num)
 
-# Muestra valores perdidos
-print(datos[variables].isna().sum())
-
 
 # Corregimos los errores detectados
 
@@ -78,11 +76,6 @@ datos['Explotaciones'] = datos['Explotaciones'].replace(99999, np.nan)
 datos['ForeignersPtge'] = [x if 0 <= x <= 100 else np.nan for x in datos['ForeignersPtge']]
 datos['SameComAutonPtge'] = [x if 0 <= x <= 100 else np.nan for x in datos['SameComAutonPtge']]
 datos['PobChange_pct'] = [x if x <= 100 else np.nan for x in datos['PobChange_pct']]
-
-# # Junto categorías poco representadas de las variables categóricas
-# datos['CalifProductor'] = datos['CalifProductor'].replace({'0': '0-1', '1': '0-1', '2': '2', '3': '3', '4': '4', '5': '5-12', '6': '5-12', 
-#          '7': '5-12', '8': '5-12', '9': '5-12', '10': '5-12', '11': '5-12', '12': '5-12'})
-
 
 # Indico la variableObj, el ID y las Input (los atipicos y los missings se gestionan
 # solo de las variables input)
@@ -104,15 +97,6 @@ categoricas_input = [variable for variable in variables_input if variable not in
 ## ATIPICOS
 
 # Cuento el porcentaje de atipicos de cada variable. 
-
-# Seleccionar las columnas numéricas en el DataFrame
-# Calcular la proporción de valores atípicos para cada columna numérica
-# utilizando una función llamada 'atipicosAmissing'
-# 'x' representa el nombre de cada columna numérica mientras se itera a través de 'numericas'
-# 'atipicosAmissing(datos_input[x])' es una llamada a una función que devuelve una dupla
-# donde el segundo elemento ([1]) es el númeron de valores atípicos
-# 'len(datos_input)' es el número total de filas en el DataFrame de entrada
-# La proporción de valores atípicos se calcula dividiendo la cantidad de valores atípicos por el número total de filas
 resultados = {x: atipicosAmissing(datos_input[x])[1] / len(datos_input) for x in numericas_input}
 
 print(resultados)
@@ -122,8 +106,12 @@ for x in numericas_input:
     datos_input[x] = atipicosAmissing(datos_input[x])[0]
 
 # MISSINGS
-# Visualiza un mapa de calor que muestra la matriz de correlación de valores ausentes en el conjunto de datos.
+    
+# Muestra valores perdidos
+variables = list(datos.columns)  
+print(datos[variables].isna().sum())
 
+# Visualiza un mapa de calor que muestra la matriz de correlación de valores ausentes en el conjunto de datos.
 patron_perdidos(datos_input)
 
 # Muestra total de valores perdidos por cada variable
@@ -162,11 +150,6 @@ categoricas_input.append('prop_missings')
 eliminar = [prop_missingsVars.index[x] for x in range(len(prop_missingsVars)) if prop_missingsVars[x] > 0.5]
 datos_input = datos_input.drop(eliminar, axis = 1)
 
-# Recategorizo categoricas con "suficientes" observaciones missings
-# Solo la variable Clasificacion que es la que tiene un 26% missing
-# Se considera una categoria mas los missing.
-# datos_input['Clasificacion'] = datos_input['Clasificacion'].fillna('Desconocido')
-
 ## IMPUTACIONES
 # Imputo todas las cuantitativas, seleccionar el tipo de imputacion: media, mediana o aleatorio
 for x in numericas_input:
@@ -203,16 +186,38 @@ with open('datosEleccionesDep.pickle', 'rb') as f:
 varObjCont = datos['AbstentionPtge']
 varObjBin = datos['AbstencionAlta']
 datos_input = datos.drop(['AbstentionPtge', 'AbstencionAlta'], axis = 1) 
- 
-# Genera una lista con los nombres de las variables.
-variables = list(datos_input.columns)
+
+
+# Como vemos que las escalas entre variables difieren mucho, vamos a normalizar las variables para que todas estén en escala 0-1
+# Esto ayuda a la regresión tanto logística como lineal
+print(datos_input.describe().T)
+
+# Separate numeric columns for normalization
+numeric_columns = datos_input.select_dtypes(include=['float64', 'int64', 'int32', 'float32']).columns
+
+# Initialize the MinMaxScaler
+scaler = MinMaxScaler()
+
+# Normalize the numeric columns
+datos_input[numeric_columns] = scaler.fit_transform(datos_input[numeric_columns])
+
+# Vemos ahora que todos los datos numéricos están normalizados
+print(datos_input.describe().T)
 
 # Obtengo la importancia de las variables
 graficoVcramer(datos_input, varObjBin)
 graficoVcramer(datos_input, varObjCont)
 
+# Eliminamos Codigo Provincia y Superficie pues por el significado de las variables no guardan relación con lo que queremos predecir
+# Además su importancia para la variable objetivo es muy pequeña
+columns_to_remove = ["CodigoProvincia", "SUPERFICIE"]
+datos_input = datos_input.drop(columns = columns_to_remove)
+
 # Crear un DataFrame para almacenar los resultados del coeficiente V de Cramer
 VCramer = pd.DataFrame(columns=['Variable', 'Objetivo', 'Vcramer'])
+
+# Genera una lista con los nombres de las variables.
+variables = list(datos_input.columns)
 
 for variable in variables:
     v_cramer = Vcramer(datos_input[variable], varObjCont)
@@ -230,10 +235,10 @@ mosaico_targetbinaria(datos_input['Densidad'], varObjBin, 'Densidad')
 mosaico_targetbinaria(datos_input['CCAA'], varObjBin, 'Comunidades Autonomas')
 
 # Veo graficamente el efecto de dos variables cuantitativas sobre la binaria
-boxplot_targetbinaria(datos_input['SameComAutonPtge'], varObjBin, 'Porcentaje de ciudadanos que reside')
+boxplot_targetbinaria(datos_input['Population'], varObjBin, 'Población')
 boxplot_targetbinaria(datos_input['Age_over65_pct'], varObjBin, 'Porcentaje mayores 65 años')
 
-hist_targetbinaria(datos_input['SameComAutonPtge'], varObjBin, 'Porcentaje de ciudadanos que reside')
+hist_targetbinaria(datos_input['Population'], varObjBin, 'Población')
 hist_targetbinaria(datos_input['Age_over65_pct'], varObjBin, 'Porcentaje mayores 65 años')
 
 # Correlación entre todas las variables numéricas frente a la objetivo continua.
@@ -275,15 +280,15 @@ with open('todo_cont.pickle', 'wb') as archivo:
 var_cont1 = []
 var_categ1 = []
 
-for column in datos_input.columns:
-    if pd.api.types.is_numeric_dtype(datos_input[column]):
+for column in input_cont.columns:
+    if pd.api.types.is_numeric_dtype(input_cont[column]):
         var_cont1.append(column)
-    elif pd.api.types.is_categorical_dtype(datos_input[column]) or pd.api.types.is_string_dtype(datos_input[column]):
+    elif pd.api.types.is_categorical_dtype(input_cont[column]) or pd.api.types.is_string_dtype(input_cont[column]):
         if(column != 'prop_missings'):
             var_categ1.append(column)
 
 # Obtengo la particion a partir de los datos depurados
-datos_modelo = crear_data_modelo(datos_input, var_cont1, var_categ1)
+datos_modelo = crear_data_modelo(input_cont, var_cont1, var_categ1)
 
 var_cont1 = []
 var_categ1 = []
@@ -502,14 +507,14 @@ var_categ3 = []
 
 modelo3 = glm(y_train, x_train, var_cont3, var_categ3)
 
-summary_glm(modelo3['Modelo'], y_train, modelo3['X'])
+print(summary_glm(modelo3['Modelo'], y_train, modelo3['X']))
 
-pseudoR2(modelo3['Modelo'], modelo3['X'], y_train)
+print(pseudoR2(modelo3['Modelo'], modelo3['X'], y_train))
 
 x_test_modelo3 = crear_data_modelo(x_test, var_cont3, var_categ3)
-pseudoR2(modelo3['Modelo'], x_test_modelo3, y_test)
+print(pseudoR2(modelo3['Modelo'], x_test_modelo3, y_test))
 
-len(modelo3['Modelo'].coef_[0])
+print(len(modelo3['Modelo'].coef_[0]))
 
 
 # Pruebo alguna interaccion sobre el modelo 3
@@ -676,3 +681,64 @@ curva_roc(x_test_modelo5, y_test, modelo5)
 # Calculamos la diferencia de las medidas de calidad entre train y test 
 sensEspCorte(modelo5['Modelo'], x_train, y_train, 0.5, var_cont5, var_categ5)
 sensEspCorte(modelo5['Modelo'], x_test, y_test, 0.5, var_cont5, var_categ5)
+
+
+
+
+
+#####################################################################
+########## Correlation matrix code ##################################
+# Miramos la matriz de correlación entre las variables
+# Crea un mapa de calor
+correlation_matrix = datos_input.corr()
+# Obtén una máscara para la parte triangular inferior
+mask = np.triu(np.ones_like(correlation_matrix, dtype=bool))
+
+# Configura el tamaño de la figura
+plt.figure(figsize=(10, 8))
+
+# Crea un mapa de calor utilizando la máscara
+sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', linewidths=0.5, mask=mask)
+
+plt.title('Matriz de Correlación - Triangular Inferior')
+plt.show()
+
+# Eliminamos aquellas variables que tienen linearidad perfecta o alta (la mayoría información redundante)
+# columns_to_remove = ["TotalCensus", "Pob2010", "inmuebles", "Servicios", "ComercTTEHosteleria", "Construccion", "Industria", "totalEmpresas",
+#                      "PersonasInmueble", "Age_0-4_Ptge", "SameComAutonPtge"]
+
+# columns_to_remove = ["TotalCensus", "Pob2010", "inmuebles", "Servicios", "ComercTTEHosteleria", "Construccion", "Industria", "totalEmpresas"]
+
+# datos_input = datos_input.drop(columns=columns_to_remove)
+
+# Miramos la matriz de correlación entre las variables
+# Crea un mapa de calor
+correlation_matrix = datos_input.corr()
+# Obtén una máscara para la parte triangular inferior
+mask = np.triu(np.ones_like(correlation_matrix, dtype=bool))
+
+# Configura el tamaño de la figura
+plt.figure(figsize=(10, 8))
+
+# Crea un mapa de calor utilizando la máscara
+sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', linewidths=0.5, mask=mask)
+
+plt.title('Matriz de Correlación - Triangular Inferior')
+plt.show()
+
+
+
+#####################################################################
+##################### Recategorizar #################################
+
+# Recategorizo uniendo Ceuta, Melilla y Murcia por tener una actividad principal similar (Hostelería, servicios u otros)
+# y por tener esto influencia notable sobre la variable objetivo, como vemos más adelante
+datos['CCAA'] = datos['CCAA'].replace({'Ceuta': 'Murcia_Ceuta_Melilla','Melilla': 'Murcia_Ceuta_Melilla', 'Murcia': 'Murcia_Ceuta_Melilla'})
+
+# Uno industria y construcción porque las ciudades en las que predominan suelen tener la misma tendencia electoral
+datos['ActividadPpal'] = datos['ActividadPpal'].replace({'Construccion': 'Industria_Construccion','Industria': 'Industria_Construccion'})
+
+# Frecuencias de los valores en las variables categóricas
+analisis_categoricas = analizar_variables_categoricas(datos)
+
+print(analisis_categoricas)
