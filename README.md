@@ -487,7 +487,108 @@ Finalmente, se realiza una verificación post-imputación para asegurar que no q
 
 ## 7. Transformaciones de variables y relaciones con las variables objetivo.
 
+### Normalización de las variables
+Como paso previo, vamos a normalizar los valores de las variables pues las escalas difieren mucho entre las propias variables input para los modelos de Regresión Lineal y Logística. Por ello vamos a llevar todos los valores entre 0 y 1 con media 0 y std 1. Para ello usamos `MinMaxScaler` de la librería `Scikit Learn` de python:
+
+```python
+# Inicializamos el normalizador
+scaler = MinMaxScaler()
+
+# Normalizamos columnas numéricas
+datos_input[numeric_columns] = scaler.fit_transform(datos_input[numeric_columns])
+```
+
+### Importancia variables y relación con variable objetivo
+
+Para ver la importancia de las variables vamos a usar el estadístico V de Cramer para comparar cada variable input del problema con la variable objetivo, ya sea numérica o categórica. Para ello empleamos la función ``graficoVcramer``. Cabe destacar, que el estadístico V de Cramer se usa para pares de variables categóricas, por ello para extraer los estadísticos primero se pasan las variables numéricas a categóricas agrupándolas por intervalos.
+
+#### Gráfico V Cramer para Variable objetivo Continua
+
+![Gráfico V Cramer para variable objetivo continua](./imgs/VCramer_continua.png)
+
+- Las variables con valores más altos podrían considerarse para el análisis.
+- Las variables que muestran un valor más bajo de Cramér V en el gráfico podrían tener una influencia limitada en la variable objetivo `AbstentionPtge` y podrían ser candidatas a excluirse del modelo de regresión lineal.
+- No obstante realizaremos un análisis más detallado, utilizando el coeficiente de correlación de Pearson para las variables continuas.
+
+#### Gráfico V Cramer para variable objetivo categórica
+![Gráfico V Cramer para variable objetivo categórica](./imgs/VCramer_continua.png)
+
+- Se observa una variación considerable en la fuerza de la asociación entre las variables independientes categóricas y la variable objetivo `AbstencionAlta`, medida por el valor de Cramér V.
+- Las variables que tienen los valores más altos de Cramér V, podrían ser los mejores predictores para la variable objetivo en un modelo de Regresión Logística.
+- Las variables con valores más bajos de Cramér V parecen tener menos asociación y podrían no ser significativas en el modelo.
+
+
 ## 8. Detección de las relaciones entre las variables input y objetivo.
+
+### Regresión Logística
+
+Vamos a analizar algunas de las variables continuas y categóricas más relevantes:
+
+#### Análisis de la Variable "Población" para Predecir "AbstencionAlta"
+
+Se presentan dos visualizaciones para entender la distribución de la variable "Población" en relación con la variable objetivo binaria "AbstencionAlta" en un contexto de regresión logística.
+
+![Boxplot e histograma de Densidad](./imgs/population_boxplot_histogram.png)
+
+El boxplot muestra la distribución de la variable "Población" para los dos grupos de "AbstencionAlta":
+
+- **Grupo 0 (Abstención baja)**: La mediana es baja y hay una concentración de datos en los valores inferiores, lo que indica que una menor proporción de la población está asociada con una menor abstención.
+- **Grupo 1 (Abstención alta)**: La mediana es más alta en comparación con el Grupo 0, lo que sugiere que una mayor proporción de la población podría estar relacionada con una mayor abstención. La presencia de valores atípicos sugiere variaciones significativas dentro del grupo.
+
+El histograma de densidad compara la distribución de la variable "Población" entre los dos grupos:
+
+- **Grupo 0 (Abstención baja)**: La distribución es más puntiaguda y estrecha, indicando menor variabilidad y una tendencia hacia valores más bajos de "Población".
+- **Grupo 1 (Abstención alta)**: La distribución es más plana y extendida, lo que implica una mayor variabilidad y un alcance más amplio de valores de "Población".
+
+La combinación de ambas visualizaciones sugiere que la variable "Población" podría tener un papel en la predicción de "AbstencionAlta". Específicamente:
+
+- **Baja Abstención (0)**: Se asocia con valores más bajos de "Población" y menos variabilidad.
+- **Alta Abstención (1)**: Se asocia con valores más altos y mayor variabilidad en la "Población".
+
+
+
+#### Análisis de la Variable "Porcentaje de Mayores de 65 Años" para Predecir "AbstencionAlta"
+
+Se analizan dos visualizaciones para comprender la distribución del "Porcentaje de Mayores de 65 Años" y su relación con la variable objetivo "AbstencionAlta", que indica si la abstención es alta (más del 30%) o no.
+
+![Boxplot e histograma de Densidad](./imgs/Over_65_boxplot_histogram.png)
+
+El boxplot muestra las diferencias en la distribución del porcentaje de personas mayores de 65 años entre las áreas con baja y alta abstención:
+
+- **Grupo 0 (Abstención baja)**: Presenta una mediana más baja y menos valores atípicos, lo que sugiere que las áreas con un menor porcentaje de mayores tienden a tener menores tasas de abstención.
+- **Grupo 1 (Abstención alta)**: Tiene una mediana más alta y una cantidad significativa de valores atípicos, lo que indica que las áreas con un mayor porcentaje de mayores de 65 años podrían estar más inclinadas a tener una alta abstención.
+
+El histograma de densidad compara la frecuencia del porcentaje de mayores de 65 años entre los dos grupos objetivo:
+
+- **Grupo 0 (Abstención baja)**: La curva es más alta y estrecha alrededor de valores más bajos, lo que indica una concentración de áreas con un porcentaje menor de mayores y baja abstención.
+- **Grupo 1 (Abstención alta)**: La distribución es más amplia y menos puntiaguda, reflejando una mayor variabilidad en el porcentaje de mayores de 65 años en las áreas con alta abstención.
+
+Las visualizaciones indican que existe una relación entre el "Porcentaje de Mayores de 65 Años" y la variable "AbstencionAlta". Específicamente:
+
+- Áreas con un **porcentaje más bajo** de mayores de 65 años tienden a tener **menor abstención**.
+- Áreas con un **porcentaje más alto** de mayores de 65 años muestran una tendencia a tener **mayor abstención**.
+
+Estos hallazgos sugieren que la edad de la población podría ser un factor relevante a considerar en un modelo de regresión logística para predecir patrones de abstención electoral. Será crucial realizar análisis estadísticos adicionales para confirmar la significancia de estas observaciones.
+
+Se presentan dos gráficos mosaicos que exploran la relación entre la variable "AbstencionAlta" y dos variables categóricas: "Densidad de Población" y la pertenencia a una determinada "Comunidad Autónoma".
+
+#### Análisis de las Variables "Densidad" "CCAA" y  para Predecir "AbstencionAlta"
+
+![Mosaico Variables Categoricas](./imgs/mosaico_categoricas.png)
+
+- **Densidad Alta**: Se observa una predominancia del valor 1 de "AbstencionAlta", lo que indica que las áreas con una alta densidad de población pueden tener mayores tasas de abstención.
+- **Densidad Baja**: Muestra una proporción mayor de "AbstencionAlta" igual a 0, sugiriendo que las áreas con menor densidad de población tienden a tener tasas más bajas de abstención.
+
+Estos resultados podrían reflejar diferencias en la accesibilidad a los centros de votación, la efectividad de las campañas de movilización electoral en áreas densamente pobladas o el nivel de compromiso cívico entre zonas urbanas y rurales.
+
+- **Diferencias Regionales**: Hay una variabilidad significativa entre las comunidades autónomas en términos de "AbstencionAlta". "Ceuta" y "Melilla" tienen una mayor frecuencia de abstención alta, mientras que "Navarra" y "País Vasco" muestran más tendencia hacia la abstención baja.
+- **Consideraciones para Políticas Públicas**: Estas diferencias pueden estar influenciadas por factores socioeconómicos, demográficos, la calidad de las políticas públicas, la efectividad de las instituciones democráticas regionales o diferencias culturales que impactan la participación electoral.
+
+La identificación de estas tendencias puede ser crucial para diseñar estrategias específicas dirigidas a incrementar la participación electoral y abordar las causas de la alta abstención en determinadas áreas o comunidades.
+
+##### Conclusión
+
+Ambos gráficos resaltan la importancia de considerar factores demográficos y geográficos al analizar patrones de abstención electoral. Los hallazgos enfatizan la necesidad de un enfoque personalizado para cada área y comunidad autónoma, con el fin de fomentar una mayor participación en los procesos electorales.
 
 ## 9. Construcción del modelo de regresión lineal.
    - Selección de variables clásica

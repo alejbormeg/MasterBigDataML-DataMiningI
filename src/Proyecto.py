@@ -204,30 +204,10 @@ datos_input[numeric_columns] = scaler.fit_transform(datos_input[numeric_columns]
 # Vemos ahora que todos los datos numéricos están normalizados
 print(datos_input.describe().T)
 
-# Obtengo la importancia de las variables
+# Obtengo la importancia de las variables Categóricas
 graficoVcramer(datos_input, varObjBin)
 graficoVcramer(datos_input, varObjCont)
 
-# Eliminamos Codigo Provincia y Superficie pues por el significado de las variables no guardan relación con lo que queremos predecir
-# Además su importancia para la variable objetivo es muy pequeña
-columns_to_remove = ["CodigoProvincia", "SUPERFICIE"]
-datos_input = datos_input.drop(columns = columns_to_remove)
-
-# Crear un DataFrame para almacenar los resultados del coeficiente V de Cramer
-VCramer = pd.DataFrame(columns=['Variable', 'Objetivo', 'Vcramer'])
-
-# Genera una lista con los nombres de las variables.
-variables = list(datos_input.columns)
-
-for variable in variables:
-    v_cramer = Vcramer(datos_input[variable], varObjCont)
-    VCramer = VCramer.append({'Variable': variable, 'Objetivo': varObjCont.name, 'Vcramer': v_cramer},
-                             ignore_index=True)
-    
-for variable in variables:
-    v_cramer = Vcramer(datos_input[variable], varObjBin)
-    VCramer = VCramer.append({'Variable': variable, 'Objetivo': varObjBin.name, 'Vcramer': v_cramer},
-                             ignore_index=True)
 
 # Veo graficamente el efecto de dos variables cualitativas sobre la binaria
 # Tomo las variables con más y menos relación con la variable objetivo Binaria
@@ -742,3 +722,12 @@ datos['ActividadPpal'] = datos['ActividadPpal'].replace({'Construccion': 'Indust
 analisis_categoricas = analizar_variables_categoricas(datos)
 
 print(analisis_categoricas)
+
+
+
+######################################################################
+########################## Elimina variables inutiles ################
+# Eliminamos Codigo Provincia y Superficie pues por el significado de las variables no guardan relación con lo que queremos predecir
+# Además su importancia para la variable objetivo es muy pequeña
+columns_to_remove = ["CodigoProvincia", "SUPERFICIE"]
+datos_input = datos_input.drop(columns = columns_to_remove)
