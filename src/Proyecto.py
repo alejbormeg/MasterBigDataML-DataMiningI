@@ -7,10 +7,12 @@ import matplotlib.pyplot as plt
 import pickle
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
+import itertools
 
 # Cargo las funciones que voy a utilizar
 from FuncionesMineria import (analizar_variables_categoricas, cuentaDistintos, frec_variables_num, 
-                           atipicosAmissing, patron_perdidos, ImputacionCuant, ImputacionCuali, lm_custom)
+                           atipicosAmissing, patron_perdidos, ImputacionCuant, ImputacionCuali, lm_custom, 
+                           lm_stepwise)
 
 import random
 
@@ -229,23 +231,62 @@ matriz_corr = pd.concat([varObjCont, datos_input[numericas]], axis = 1).corr(met
 # Crear una máscara para ocultar la mitad superior de la matriz de correlación (triangular superior)
 mask = np.triu(np.ones_like(matriz_corr, dtype=bool))
 # Crear una figura para el gráfico con un tamaño de 8x6 pulgadas
-plt.figure(figsize=(8, 6))
+plt.figure(figsize=(10, 8))
+# Crea un mapa de calor utilizando la máscara
+sns.heatmap(matriz_corr, annot=True, cmap='coolwarm', linewidths=0.5, mask=mask)
 # Establecer el tamaño de fuente en el gráfico
 sns.set(font_scale=1.2)
-# Crear un mapa de calor (heatmap) de la matriz de correlación
-sns.heatmap(matriz_corr, annot=True, cmap='coolwarm', fmt=".2f", cbar=True, mask=mask)
 # Establecer el título del gráfico
 plt.title("Matriz de correlación")
 # Mostrar el gráfico de la matriz de correlación
 plt.show()
 
+# Eliminamos variables altamente correlacionadas
+columns_to_remove = ["TotalCensus", "Pob2010", "inmuebles", "Servicios", "ComercTTEHosteleria", 
+                     "Construccion", "Industria", 
+                     "totalEmpresas", "SUPERFICIE", 
+                     "CodigoProvincia", "SameComAutonPtge", 
+                     "SameComAutonDiffProvPtge", "DifComAutonPtge", 
+                     "UnemployLess25_Ptge","UnemployMore40_Ptge", 
+                     "AgricultureUnemploymentPtge", "ConstructionUnemploymentPtge"]
+
+datos_input = datos_input.drop(columns=columns_to_remove)
+
+# Recategorizo uniendo Ceuta, Melilla y Murcia por tener una actividad principal similar (Hostelería, servicios u otros)
+# y por tener esto influencia notable sobre la variable objetivo, como vemos más adelante
+datos_input['CCAA'] = datos_input['CCAA'].replace({'Ceuta': 'Murcia_Ceuta_Melilla','Melilla': 'Murcia_Ceuta_Melilla', 'Murcia': 'Murcia_Ceuta_Melilla'})
+
+# Uno industria y construcción porque las ciudades en las que predominan suelen tener la misma tendencia electoral
+datos_input['ActividadPpal'] = datos_input['ActividadPpal'].replace({'Construccion': 'Industria_Construccion','Industria': 'Industria_Construccion'})
+
+numericas = datos_input.select_dtypes(include=['int', 'float']).columns
+
 # Busco las mejores transformaciones para las variables numericas con respesto a los dos tipos de variables
+print(Transf_Auto(datos_input[numericas], varObjCont))
+
 input_cont = pd.concat([datos_input, Transf_Auto(datos_input[numericas], varObjCont)], axis = 1)
 input_bin = pd.concat([datos_input, Transf_Auto(datos_input[numericas], varObjBin)], axis = 1)
+
 
 # Creamos conjuntos de datos que contengan las variables explicativas y una de las variables objetivo y los guardamos
 todo_cont = pd.concat([input_cont, varObjCont], axis = 1)
 todo_bin = pd.concat([input_bin, varObjBin], axis = 1)
+
+# Calcular la matriz de correlación de Pearson entre la variable objetivo continua ('varObjCont') y las variables numéricas
+matriz_corr = todo_cont.corr(method = 'pearson')
+# Crear una máscara para ocultar la mitad superior de la matriz de correlación (triangular superior)
+mask = np.triu(np.ones_like(matriz_corr, dtype=bool))
+# Crear una figura para el gráfico con un tamaño de 8x6 pulgadas
+plt.figure(figsize=(10, 8))
+# Crea un mapa de calor utilizando la máscara
+sns.heatmap(matriz_corr, annot=True, cmap='coolwarm', linewidths=0.5, mask=mask)
+# Establecer el tamaño de fuente en el gráfico
+sns.set(font_scale=1.2)
+# Establecer el título del gráfico
+plt.title("Matriz de correlación")
+# Mostrar el gráfico de la matriz de correlación
+plt.show()
+
 with open('todo_bin.pickle', 'wb') as archivo:
     pickle.dump(todo_bin, archivo)
 with open('todo_cont.pickle', 'wb') as archivo:
@@ -253,6 +294,139 @@ with open('todo_cont.pickle', 'wb') as archivo:
 
 
 ## Comenzamos con la regresion lineal
+    
+
+
+
+# Hago de nuevo la partición porque hay una nueva variable en el conjunto de datos "Todo"
+x_train, x_test, y_train, y_test = train_test_split(input_cont, varObjCont, test_size = 0.2, random_state = 1234567)
+
+# Genera una lista con los nombres de las variables.
+variables = list(input_cont.columns)  
+
+# Variables numéricas originales
+var_cont = numericas.to_list()
+
+# Variables categ originales
+var_categ = [x for x in categoricas_input if x !="prop_missings"]
+
+# Seleccionar las columnas numéricas del DataFrame
+var_cont_con_transf = input_cont.select_dtypes(include=['int', 'int32', 'int64','float', 'float32', 'float64']).columns.to_list()
+
+# Interacciones 2 a 2 de todas las variables (excepto las continuas transformadas)
+interacciones = var_cont + var_categ
+interacciones_unicas = list(itertools.combinations(interacciones, 2))
+
+
+# MODELO 1 Stepwise, métrica AIC  con transformaciones con interacciones
+
+modeloStepAIC_con_trans_con_int = lm_stepwise(y_train, x_train, var_cont_con_transf, var_categ,
+                                interacciones_unicas, 'AIC')
+
+# Resumen del modelo
+print(modeloStepAIC_con_trans_con_int['Modelo'].summary())
+
+# R-squared del modelo para train
+print(Rsq(modeloStepAIC_con_trans_con_int['Modelo'], y_train, modeloStepAIC_con_trans_con_int['X']))
+
+# Preparo datos test
+x_test_modeloStepAIC_con_trans_con_int = crear_data_modelo(x_test, modeloStepAIC_con_trans_con_int['Variables']['cont'], 
+                                                    modeloStepAIC_con_trans_con_int['Variables']['categ'], 
+                                                    modeloStepAIC_con_trans_con_int['Variables']['inter'])
+# R-squared del modelo para test
+print(Rsq(modeloStepAIC_con_trans_con_int['Modelo'], y_test, x_test_modeloStepAIC_con_trans_con_int))
+
+# MODELO 2 Stepwise, métrica BIC  con transformaciones con interacciones
+
+modeloStepBIC_con_trans_con_int = lm_stepwise(y_train, x_train, var_cont_con_transf, var_categ,
+                                interacciones_unicas, 'AIC')
+
+# Resumen del modelo
+print(modeloStepBIC_con_trans_con_int['Modelo'].summary())
+
+# R-squared del modelo para train
+print(Rsq(modeloStepBIC_con_trans_con_int['Modelo'], y_train, modeloStepBIC_con_trans_con_int['X']))
+
+# Preparo datos test
+x_test_modeloStepBIC_con_trans_con_int = crear_data_modelo(x_test, modeloStepBIC_con_trans_con_int['Variables']['cont'], 
+                                                    modeloStepBIC_con_trans_con_int['Variables']['categ'], 
+                                                    modeloStepBIC_con_trans_con_int['Variables']['inter'])
+# R-squared del modelo para test
+print(Rsq(modeloStepBIC_con_trans_con_int['Modelo'], y_test, x_test_modeloStepBIC_con_trans_con_int))
+
+# Hago validacion cruzada repetida para ver que modelo es mejor
+# Crea un DataFrame vacío para almacenar resultados
+results = pd.DataFrame({
+    'Rsquared': []
+    , 'Resample': []
+    , 'Modelo': []
+})
+
+# Realiza el siguiente proceso 20 veces (representado por el bucle `for rep in range(20)`)
+for rep in range(20):
+    # Realiza validación cruzada en seis modelos diferentes y almacena sus R-squared en listas separadas
+
+    modelo_stepBIC = validacion_cruzada_lm(
+        5
+        , x_train
+        , y_train
+        , modeloStepBIC_con_trans_con_int['Variables']['cont']
+        , modeloStepBIC_con_trans_con_int['Variables']['categ']
+        , modeloStepBIC_con_trans_con_int['Variables']['inter']
+    )
+    modelo_stepAIC = validacion_cruzada_lm(
+        5
+        , x_train
+        , y_train
+        , modeloStepAIC_con_trans_con_int['Variables']['cont']
+        , modeloStepAIC_con_trans_con_int['Variables']['categ']
+        , modeloStepAIC_con_trans_con_int['Variables']['inter']
+    )
+
+    results_rep = pd.DataFrame({
+        'Rsquared': modelo_stepBIC + modelo_stepAIC
+        , 'Resample': ['Rep' + str((rep + 1))]*5*2 # Etiqueta de repetición (5 repeticiones 2 modelos)
+        , 'Modelo': [1]*5 + [2]*5 # Etiqueta de modelo (2 modelos 5 repeticiones)
+    })
+    results = pd.concat([results, results_rep], axis = 0)
+    
+# Boxplot de la validacion cruzada 
+plt.figure(figsize=(10, 6))  # Crea una figura de tamaño 10x6
+plt.grid(True)  # Activa la cuadrícula en el gráficoç
+# Agrupa los valores de Rsquared por modelo
+grupo_metrica = results.groupby('Modelo')['Rsquared']
+# Organiza los valores de R-squared por grupo en una lista
+boxplot_data = [grupo_metrica.get_group(grupo).tolist() for grupo in grupo_metrica.groups]
+# Crea un boxplot con los datos organizados
+plt.boxplot(boxplot_data, labels=grupo_metrica.groups.keys())  # Etiqueta los grupos en el boxplot
+# Etiqueta los ejes del gráfico
+plt.xlabel('Modelo')  # Etiqueta del eje x
+plt.ylabel('Rsquared')  # Etiqueta del eje y
+plt.show()  # Muestra el gráfico 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 # Construyo un modelo preliminar con todas las variables (originales)
 # Indico la tipología de las variables (numéricas o categóricas)
@@ -661,73 +835,3 @@ curva_roc(x_test_modelo5, y_test, modelo5)
 # Calculamos la diferencia de las medidas de calidad entre train y test 
 sensEspCorte(modelo5['Modelo'], x_train, y_train, 0.5, var_cont5, var_categ5)
 sensEspCorte(modelo5['Modelo'], x_test, y_test, 0.5, var_cont5, var_categ5)
-
-
-
-
-
-#####################################################################
-########## Correlation matrix code ##################################
-# Miramos la matriz de correlación entre las variables
-# Crea un mapa de calor
-correlation_matrix = datos_input.corr()
-# Obtén una máscara para la parte triangular inferior
-mask = np.triu(np.ones_like(correlation_matrix, dtype=bool))
-
-# Configura el tamaño de la figura
-plt.figure(figsize=(10, 8))
-
-# Crea un mapa de calor utilizando la máscara
-sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', linewidths=0.5, mask=mask)
-
-plt.title('Matriz de Correlación - Triangular Inferior')
-plt.show()
-
-# Eliminamos aquellas variables que tienen linearidad perfecta o alta (la mayoría información redundante)
-# columns_to_remove = ["TotalCensus", "Pob2010", "inmuebles", "Servicios", "ComercTTEHosteleria", "Construccion", "Industria", "totalEmpresas",
-#                      "PersonasInmueble", "Age_0-4_Ptge", "SameComAutonPtge"]
-
-# columns_to_remove = ["TotalCensus", "Pob2010", "inmuebles", "Servicios", "ComercTTEHosteleria", "Construccion", "Industria", "totalEmpresas"]
-
-# datos_input = datos_input.drop(columns=columns_to_remove)
-
-# Miramos la matriz de correlación entre las variables
-# Crea un mapa de calor
-correlation_matrix = datos_input.corr()
-# Obtén una máscara para la parte triangular inferior
-mask = np.triu(np.ones_like(correlation_matrix, dtype=bool))
-
-# Configura el tamaño de la figura
-plt.figure(figsize=(10, 8))
-
-# Crea un mapa de calor utilizando la máscara
-sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', linewidths=0.5, mask=mask)
-
-plt.title('Matriz de Correlación - Triangular Inferior')
-plt.show()
-
-
-
-#####################################################################
-##################### Recategorizar #################################
-
-# Recategorizo uniendo Ceuta, Melilla y Murcia por tener una actividad principal similar (Hostelería, servicios u otros)
-# y por tener esto influencia notable sobre la variable objetivo, como vemos más adelante
-datos['CCAA'] = datos['CCAA'].replace({'Ceuta': 'Murcia_Ceuta_Melilla','Melilla': 'Murcia_Ceuta_Melilla', 'Murcia': 'Murcia_Ceuta_Melilla'})
-
-# Uno industria y construcción porque las ciudades en las que predominan suelen tener la misma tendencia electoral
-datos['ActividadPpal'] = datos['ActividadPpal'].replace({'Construccion': 'Industria_Construccion','Industria': 'Industria_Construccion'})
-
-# Frecuencias de los valores en las variables categóricas
-analisis_categoricas = analizar_variables_categoricas(datos)
-
-print(analisis_categoricas)
-
-
-
-######################################################################
-########################## Elimina variables inutiles ################
-# Eliminamos Codigo Provincia y Superficie pues por el significado de las variables no guardan relación con lo que queremos predecir
-# Además su importancia para la variable objetivo es muy pequeña
-columns_to_remove = ["CodigoProvincia", "SUPERFICIE"]
-datos_input = datos_input.drop(columns = columns_to_remove)

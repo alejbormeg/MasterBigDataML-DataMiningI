@@ -590,6 +590,60 @@ La identificación de estas tendencias puede ser crucial para diseñar estrategi
 
 Ambos gráficos resaltan la importancia de considerar factores demográficos y geográficos al analizar patrones de abstención electoral. Los hallazgos enfatizan la necesidad de un enfoque personalizado para cada área y comunidad autónoma, con el fin de fomentar una mayor participación en los procesos electorales.
 
+
+### Regresión Lineal
+
+Calculamos la matriz de correlaciones de las variables numéricas incluyendo la variable continua objetivo: 
+
+![Matriz de correlaciones](./imgs/matriz_correlaciones_input.png)
+
+
+La matriz de correlaciones proporciona información valiosa sobre la relación entre la variable objetivo "AbstentionPtge" y un conjunto de variables independientes. También nos permite evaluar la correlación entre las variables independientes para detectar multicolinealidad.
+
+#### Correlaciones con la Variable Objetivo "AbstentionPtge"
+
+- Como podemos observar, ninguna guarda una estrecha correlación con la variable objetivo, las que más tienen son `Age_under19_Ptge` y `PersonasInmueble` (0.33), sugiriendo que un mayor porcentaje de la población en estos segmentos podría estar relacionado con un mayor porcentaje de abstención.
+- `Age_over65_pct` muestra una correlación negativa, indicando que las personas de este grupo tienden a tener menores porcentajes de abstención.
+
+#### Correlaciones entre Variables Input
+
+- Podemos obstervar un conjunto de variables input fuertemente correlacionadas entre sí 2 a 2 (con valores superiores a 0.9), por lo que podemos considerar eliminar algunas de esteas variables, son el caso de: "TotalCensus", "Pob2010", "inmuebles", "Servicios", "ComercTTEHosteleria", "Construccion", "Industria", "totalEmpresas".
+
+#### Conclusión
+
+La matriz de correlaciones ha revelado relaciones significativas y nos ha proporcionado una base sólida para la selección de variables en nuestro modelo de regresión lineal. La selección cuidadosa de variables es crucial para mejorar la interpretación y el rendimiento del modelo.
+
+
+### Transformaciones y eliminación de variables
+
+En primer lugar eliminamos las variables input altamente correlacionadas y además "SUPERFICIE" por no guardar relación con el problema y tener una correlación de prácticamente 0 con la variable objetivo: 
+
+```python
+# Eliminamos variables altamente correlacionadas
+columns_to_remove = ["TotalCensus", "Pob2010", "inmuebles", "Servicios", "ComercTTEHosteleria", "Construccion", "Industria", "totalEmpresas", "SUPERFICIE", "CodigoProvincia"]
+datos_input = datos_input.drop(columns=columns_to_remove)
+```
+
+Con el objetivo de maximizar la correlación entre variables input y las variables objetivo ejecutamos la función `Transf_Auto` sobre los datos con el siguiente código: 
+
+```python
+# Busco las mejores transformaciones para las variables numericas con respesto a los dos tipos de variables
+input_cont = pd.concat([datos_input, Transf_Auto(datos_input[numericas], varObjCont)], axis = 1)
+input_bin = pd.concat([datos_input, Transf_Auto(datos_input[numericas], varObjBin)], axis = 1)
+```
+
+El resultado de la matriz de correlaciones tras los cambios es el siguiente:
+
+![Matriz correlaciones transformadas](./imgs/Matriz_correlaciones_transformadas.png)
+
+Finalmente, unimos categorías poco representadas en las variables categóricas de "CCAA" y "ActividadPpal". En concreto unimos Ceuta, Melilla y Murcia por tener una actividad principal similar (Hostelería, servicios u otros) y características similares, y unimos "Construccion" e "Industria" en "ActividadPpal".
+
+```python
+datos_input['CCAA'] = datos_input['CCAA'].replace({'Ceuta': 'Murcia_Ceuta_Melilla','Melilla': 'Murcia_Ceuta_Melilla', 'Murcia': 'Murcia_Ceuta_Melilla'})
+
+datos_input['ActividadPpal'] = datos_input['ActividadPpal'].replace({'Construccion': 'Industria_Construccion','Industria': 'Industria_Construccion'})
+```
+
 ## 9. Construcción del modelo de regresión lineal.
    - Selección de variables clásica
    - Selección de variables aleatoria
