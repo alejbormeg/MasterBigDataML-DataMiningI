@@ -12,7 +12,7 @@ import itertools
 # Cargo las funciones que voy a utilizar
 from FuncionesMineria import (analizar_variables_categoricas, cuentaDistintos, frec_variables_num, 
                            atipicosAmissing, patron_perdidos, ImputacionCuant, ImputacionCuali, lm_custom, 
-                           lm_stepwise)
+                           lm_stepwise, glm_stepwise, validacion_cruzada_glm)
 
 import random
 
@@ -318,16 +318,130 @@ interacciones = var_cont + var_categ
 interacciones_unicas = list(itertools.combinations(interacciones, 2))
 
 
-# MODELO 1 Stepwise, métrica AIC  con transformaciones con interacciones
+# # MODELO 1 Stepwise, métrica AIC  con transformaciones con interacciones
 
-modeloStepAIC_con_trans_con_int = lm_stepwise(y_train, x_train, var_cont_con_transf, var_categ,
+# modeloStepAIC_con_trans_con_int = lm_stepwise(y_train, x_train, var_cont_con_transf, var_categ,
+#                                 interacciones_unicas, 'AIC')
+
+# # Resumen del modelo
+# print(modeloStepAIC_con_trans_con_int['Modelo'].summary())
+
+# # R-squared del modelo para train
+# print(Rsq(modeloStepAIC_con_trans_con_int['Modelo'], y_train, modeloStepAIC_con_trans_con_int['X']))
+
+# # Preparo datos test
+# x_test_modeloStepAIC_con_trans_con_int = crear_data_modelo(x_test, modeloStepAIC_con_trans_con_int['Variables']['cont'], 
+#                                                     modeloStepAIC_con_trans_con_int['Variables']['categ'], 
+#                                                     modeloStepAIC_con_trans_con_int['Variables']['inter'])
+# # R-squared del modelo para test
+# print(Rsq(modeloStepAIC_con_trans_con_int['Modelo'], y_test, x_test_modeloStepAIC_con_trans_con_int))
+
+# # MODELO 2 Stepwise, métrica BIC  con transformaciones con interacciones
+
+# modeloStepBIC_con_trans_con_int = lm_stepwise(y_train, x_train, var_cont_con_transf, var_categ,
+#                                 interacciones_unicas, 'BIC')
+
+# # Resumen del modelo
+# print(modeloStepBIC_con_trans_con_int['Modelo'].summary())
+
+# # R-squared del modelo para train
+# print(Rsq(modeloStepBIC_con_trans_con_int['Modelo'], y_train, modeloStepBIC_con_trans_con_int['X']))
+
+# # Preparo datos test
+# x_test_modeloStepBIC_con_trans_con_int = crear_data_modelo(x_test, modeloStepBIC_con_trans_con_int['Variables']['cont'], 
+#                                                     modeloStepBIC_con_trans_con_int['Variables']['categ'], 
+#                                                     modeloStepBIC_con_trans_con_int['Variables']['inter'])
+# # R-squared del modelo para test
+# print(Rsq(modeloStepBIC_con_trans_con_int['Modelo'], y_test, x_test_modeloStepBIC_con_trans_con_int))
+
+# # Hago validacion cruzada repetida para ver que modelo es mejor
+# # Crea un DataFrame vacío para almacenar resultados
+# results = pd.DataFrame({
+#     'Rsquared': []
+#     , 'Resample': []
+#     , 'Modelo': []
+# })
+
+# # Realiza el siguiente proceso 20 veces (representado por el bucle `for rep in range(20)`)
+# for rep in range(20):
+#     # Realiza validación cruzada en seis modelos diferentes y almacena sus R-squared en listas separadas
+
+#     modelo_stepBIC = validacion_cruzada_lm(
+#         5
+#         , x_train
+#         , y_train
+#         , modeloStepBIC_con_trans_con_int['Variables']['cont']
+#         , modeloStepBIC_con_trans_con_int['Variables']['categ']
+#         , modeloStepBIC_con_trans_con_int['Variables']['inter']
+#     )
+#     modelo_stepAIC = validacion_cruzada_lm(
+#         5
+#         , x_train
+#         , y_train
+#         , modeloStepAIC_con_trans_con_int['Variables']['cont']
+#         , modeloStepAIC_con_trans_con_int['Variables']['categ']
+#         , modeloStepAIC_con_trans_con_int['Variables']['inter']
+#     )
+
+#     results_rep = pd.DataFrame({
+#         'Rsquared': modelo_stepBIC + modelo_stepAIC
+#         , 'Resample': ['Rep' + str((rep + 1))]*5*2 # Etiqueta de repetición (5 repeticiones 2 modelos)
+#         , 'Modelo': [1]*5 + [2]*5 # Etiqueta de modelo (2 modelos 5 repeticiones)
+#     })
+#     results = pd.concat([results, results_rep], axis = 0)
+    
+# # Boxplot de la validacion cruzada 
+# plt.figure(figsize=(10, 6))  # Crea una figura de tamaño 10x6
+# plt.grid(True)  # Activa la cuadrícula en el gráficoç
+# # Agrupa los valores de Rsquared por modelo
+# grupo_metrica = results.groupby('Modelo')['Rsquared']
+# # Organiza los valores de R-squared por grupo en una lista
+# boxplot_data = [grupo_metrica.get_group(grupo).tolist() for grupo in grupo_metrica.groups]
+# # Crea un boxplot con los datos organizados
+# plt.boxplot(boxplot_data, labels=grupo_metrica.groups.keys())  # Etiqueta los grupos en el boxplot
+# # Etiqueta los ejes del gráfico
+# plt.xlabel('Modelo')  # Etiqueta del eje x
+# plt.ylabel('Rsquared')  # Etiqueta del eje y
+# plt.show()  # Muestra el gráfico 
+
+
+
+
+# results.to_csv("resultados.csv")
+# print(results)
+
+
+
+
+### Regresión Logística
+# MODELO 1 Stepwise, métrica AIC  con transformaciones con interacciones
+# Hago de nuevo la partición porque hay una nueva variable en el conjunto de datos "Todo"
+x_train, x_test, y_train, y_test = train_test_split(input_bin, varObjBin, test_size = 0.2, random_state = 1234567)
+
+# Genera una lista con los nombres de las variables.
+variables = list(input_bin.columns)  
+
+# Variables numéricas originales
+var_cont = numericas.to_list()
+
+# Variables categ originales
+var_categ = [x for x in categoricas_input if x !="prop_missings"]
+
+# Seleccionar las columnas numéricas del DataFrame
+var_cont_con_transf = input_bin.select_dtypes(include=['int', 'int32', 'int64','float', 'float32', 'float64']).columns.to_list()
+
+# Interacciones 2 a 2 de todas las variables (excepto las continuas transformadas)
+interacciones = var_cont + var_categ
+interacciones_unicas = list(itertools.combinations(interacciones, 2))
+
+modeloStepAIC_con_trans_con_int = glm_stepwise(y_train.astype(int), x_train, var_cont_con_transf, var_categ,
                                 interacciones_unicas, 'AIC')
 
 # Resumen del modelo
-print(modeloStepAIC_con_trans_con_int['Modelo'].summary())
+print(modeloStepAIC_con_trans_con_int['Modelo'])
 
 # R-squared del modelo para train
-print(Rsq(modeloStepAIC_con_trans_con_int['Modelo'], y_train, modeloStepAIC_con_trans_con_int['X']))
+print(Rsq(modeloStepAIC_con_trans_con_int['Modelo'], y_train.astype(int), modeloStepAIC_con_trans_con_int['X']))
 
 # Preparo datos test
 x_test_modeloStepAIC_con_trans_con_int = crear_data_modelo(x_test, modeloStepAIC_con_trans_con_int['Variables']['cont'], 
@@ -338,14 +452,14 @@ print(Rsq(modeloStepAIC_con_trans_con_int['Modelo'], y_test, x_test_modeloStepAI
 
 # MODELO 2 Stepwise, métrica BIC  con transformaciones con interacciones
 
-modeloStepBIC_con_trans_con_int = lm_stepwise(y_train, x_train, var_cont_con_transf, var_categ,
-                                interacciones_unicas, 'AIC')
+modeloStepBIC_con_trans_con_int = glm_stepwise(y_train.astype(int), x_train, var_cont_con_transf, var_categ,
+                                interacciones_unicas, 'BIC')
 
 # Resumen del modelo
-print(modeloStepBIC_con_trans_con_int['Modelo'].summary())
+print(modeloStepBIC_con_trans_con_int['Modelo'])
 
 # R-squared del modelo para train
-print(Rsq(modeloStepBIC_con_trans_con_int['Modelo'], y_train, modeloStepBIC_con_trans_con_int['X']))
+print(Rsq(modeloStepBIC_con_trans_con_int['Modelo'], y_train.astype(int), modeloStepBIC_con_trans_con_int['X']))
 
 # Preparo datos test
 x_test_modeloStepBIC_con_trans_con_int = crear_data_modelo(x_test, modeloStepBIC_con_trans_con_int['Variables']['cont'], 
@@ -366,7 +480,7 @@ results = pd.DataFrame({
 for rep in range(20):
     # Realiza validación cruzada en seis modelos diferentes y almacena sus R-squared en listas separadas
 
-    modelo_stepBIC = validacion_cruzada_lm(
+    modelo_stepBIC = validacion_cruzada_glm(
         5
         , x_train
         , y_train
@@ -374,7 +488,7 @@ for rep in range(20):
         , modeloStepBIC_con_trans_con_int['Variables']['categ']
         , modeloStepBIC_con_trans_con_int['Variables']['inter']
     )
-    modelo_stepAIC = validacion_cruzada_lm(
+    modelo_stepAIC = validacion_cruzada_glm(
         5
         , x_train
         , y_train
@@ -392,7 +506,7 @@ for rep in range(20):
     
 # Boxplot de la validacion cruzada 
 plt.figure(figsize=(10, 6))  # Crea una figura de tamaño 10x6
-plt.grid(True)  # Activa la cuadrícula en el gráficoç
+plt.grid(True)  # Activa la cuadrícula en el gráfico
 # Agrupa los valores de Rsquared por modelo
 grupo_metrica = results.groupby('Modelo')['Rsquared']
 # Organiza los valores de R-squared por grupo en una lista
@@ -407,8 +521,15 @@ plt.show()  # Muestra el gráfico
 
 
 
+results.to_csv("resultados_regresion_logistica.csv")
+print(results)
 
 
+
+
+
+
+exit()
 
 
 
