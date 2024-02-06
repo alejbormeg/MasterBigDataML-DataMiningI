@@ -9,11 +9,12 @@ import itertools
 import random
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
+from collections import Counter
 
 # Cargo las funciones que voy a utilizar
 from FuncionesMineria import (analizar_variables_categoricas, cuentaDistintos, frec_variables_num, 
                            atipicosAmissing, patron_perdidos, ImputacionCuant, ImputacionCuali, lm_custom, 
-                           lm_stepwise, glm_stepwise, validacion_cruzada_glm, lm_forward, lm_backward, glm_forward, glm_backward)
+                           lm_stepwise, glm_stepwise, validacion_cruzada_glm, lm_forward, lm_backward, glm_forward, glm_backward, glm)
 
 random.seed(42)
 
@@ -79,6 +80,9 @@ datos['Explotaciones'] = datos['Explotaciones'].replace(99999, np.nan)
 datos['ForeignersPtge'] = [x if 0 <= x <= 100 else np.nan for x in datos['ForeignersPtge']]
 datos['SameComAutonPtge'] = [x if 0 <= x <= 100 else np.nan for x in datos['SameComAutonPtge']]
 datos['PobChange_pct'] = [x if x <= 100 else np.nan for x in datos['PobChange_pct']]
+
+# Cambiamos tipo de la binaria a int
+datos['AbstencionAlta'] = datos['AbstencionAlta'].astype(int)
 
 # Indico la variableObj, el ID y las Input (los atipicos y los missings se gestionan
 # solo de las variables input)
@@ -177,9 +181,7 @@ with open('datosEleccionesDep.pickle', 'wb') as archivo:
 
 
 # Cargo las funciones que voy a utilizar despues
-from FuncionesMineria import (graficoVcramer, mosaico_targetbinaria, boxplot_targetbinaria, 
-                           hist_targetbinaria, Transf_Auto, lm, Rsq, validacion_cruzada_lm,
-                           modelEffectSizes, modelEffectSizes_custom, crear_data_modelo, Vcramer)
+from FuncionesMineria import *
 
 # Parto de los datos ya depurados
 with open('datosEleccionesDep.pickle', 'rb') as f:
@@ -316,249 +318,289 @@ interacciones = var_categ
 interacciones_unicas = list(itertools.combinations(interacciones, 2))
 
 
-# MODELO 0 Selección aleatoria
-modelo_aleatorio = lm(y_train, x_train, random.sample(var_cont_con_transf, 3), random.sample(var_categ, 3),
-                                random.sample(interacciones_unicas,3))
+# # MODELO 0 Selección aleatoria
+# ## Seleccion aleatoria (se coge la submuestra de los datos de entrenamiento)
+# # Concretamente el 70% de los datos de entrenamiento utilizados para contruir los
+# # modelos anteriores.
+# # El método de selección usado ha sido el Stepwise con el criterio BIC
+# # Se aplica este método a 30 submuestras diferentes
 
-# Resumen del modelo
-print(modelo_aleatorio['Modelo'].summary())
+# # Inicializar un diccionario para almacenar las fórmulas y variables seleccionadas.
+# variables_seleccionadas = {
+#     'Formula': [],
+#     'Variables': []
+# }
 
-# R-squared del modelo para train
-print(Rsq(modelo_aleatorio['Modelo'], y_train, modelo_aleatorio['X']))
+# # Realizar 30 iteraciones de selección aleatoria.
+# for x in range(30):
+#     print('---------------------------- iter: ' + str(x))
+   
+#     # Dividir los datos de entrenamiento en conjuntos de entrenamiento y prueba.
+#     x_train2, x_test2, y_train2, y_test2 = train_test_split(x_train, y_train,
+#                                                             test_size = 0.3, random_state = 1234567 + x)
+   
+#     # Realizar la selección stepwise utilizando el criterio BIC en la submuestra.
+#     modelo = lm_stepwise(y_train2, x_train2, var_cont_con_transf, var_categ, interacciones_unicas, 'BIC')
+   
+#     # Almacenar las variables seleccionadas y la fórmula correspondiente.
+#     variables_seleccionadas['Variables'].append(modelo['Variables'])
+#     variables_seleccionadas['Formula'].append(sorted(modelo['Modelo'].model.exog_names))
 
-# Preparo datos test
-x_test_aleatorio = crear_data_modelo(x_test, modelo_aleatorio['Variables']['cont'], 
-                                                    modelo_aleatorio['Variables']['categ'], 
-                                                    modelo_aleatorio['Variables']['inter'])
-# R-squared del modelo para test
-print(Rsq(modelo_aleatorio['Modelo'], y_test, x_test_aleatorio))
+# # Unir las variables en las fórmulas seleccionadas en una sola cadena.
+# variables_seleccionadas['Formula'] = list(map(lambda x: '+'.join(x), variables_seleccionadas['Formula']))
+   
+# # Calcular la frecuencia de cada fórmula y ordenarlas por frecuencia.
+# frecuencias = Counter(variables_seleccionadas['Formula'])
+# frec_ordenada = pd.DataFrame(list(frecuencias.items()), columns = ['Formula', 'Frecuencia'])
+# frec_ordenada = frec_ordenada.sort_values('Frecuencia', ascending = False).reset_index()
 
-# MODELO 1 forward, métrica AIC  con transformaciones con interacciones
+# # Identificar las dos modelos más frecuentes y las variables correspondientes.
+# ivar_1 = variables_seleccionadas['Variables'][variables_seleccionadas['Formula'].index(
+#     frec_ordenada['Formula'][0])]
+# var_2 = variables_seleccionadas['Variables'][variables_seleccionadas['Formula'].index(
+#     frec_ordenada['Formula'][1])]
 
-modeloForwardAIC_con_trans_con_int = lm_forward(y_train, x_train, var_cont_con_transf, var_categ,
-                                interacciones_unicas, 'AIC')
+# # Con las variables obtenidas entrenamos el modelo aleatorio
 
-# Resumen del modelo
-print(modeloForwardAIC_con_trans_con_int['Modelo'].summary())
+# modelo_aleatorio = lm(y_train, x_train, ivar_1['cont'], ivar_1['categ'],
+#                                  ivar_1['inter'])
 
-# R-squared del modelo para train
-print(Rsq(modeloForwardAIC_con_trans_con_int['Modelo'], y_train, modeloForwardAIC_con_trans_con_int['X']))
+# # Resumen del modelo
+# print(modelo_aleatorio['Modelo'].summary())
 
-# Preparo datos test
-x_test_modeloForwardAIC_con_trans_con_int = crear_data_modelo(x_test, modeloForwardAIC_con_trans_con_int['Variables']['cont'], 
-                                                    modeloForwardAIC_con_trans_con_int['Variables']['categ'], 
-                                                    modeloForwardAIC_con_trans_con_int['Variables']['inter'])
-# R-squared del modelo para test
-print(Rsq(modeloForwardAIC_con_trans_con_int['Modelo'], y_test, x_test_modeloForwardAIC_con_trans_con_int))
+# # R-squared del modelo para train
+# print(Rsq(modelo_aleatorio['Modelo'], y_train, modelo_aleatorio['X']))
 
-
-# MODELO 2 backward, métrica AIC  con transformaciones con interacciones
-
-modeloBackwardAIC_con_trans_con_int = lm_backward(y_train, x_train, var_cont_con_transf, var_categ,
-                                interacciones_unicas, 'AIC')
-
-# Resumen del modelo
-print(modeloBackwardAIC_con_trans_con_int['Modelo'].summary())
-
-# R-squared del modelo para train
-print(Rsq(modeloBackwardAIC_con_trans_con_int['Modelo'], y_train, modeloBackwardAIC_con_trans_con_int['X']))
-
-# Preparo datos test
-x_test_modeloBackwardAIC_con_trans_con_int = crear_data_modelo(x_test, modeloBackwardAIC_con_trans_con_int['Variables']['cont'], 
-                                                    modeloBackwardAIC_con_trans_con_int['Variables']['categ'], 
-                                                    modeloBackwardAIC_con_trans_con_int['Variables']['inter'])
-# R-squared del modelo para test
-print(Rsq(modeloBackwardAIC_con_trans_con_int['Modelo'], y_test, x_test_modeloBackwardAIC_con_trans_con_int))
-
-# MODELO 3 Stepwise, métrica AIC  con transformaciones con interacciones
-
-modeloStepAIC_con_trans_con_int = lm_stepwise(y_train, x_train, var_cont_con_transf, var_categ,
-                                interacciones_unicas, 'AIC')
-
-# Resumen del modelo
-print(modeloStepAIC_con_trans_con_int['Modelo'].summary())
-
-# R-squared del modelo para train
-print(Rsq(modeloStepAIC_con_trans_con_int['Modelo'], y_train, modeloStepAIC_con_trans_con_int['X']))
-
-# Preparo datos test
-x_test_modeloStepAIC_con_trans_con_int = crear_data_modelo(x_test, modeloStepAIC_con_trans_con_int['Variables']['cont'], 
-                                                    modeloStepAIC_con_trans_con_int['Variables']['categ'], 
-                                                    modeloStepAIC_con_trans_con_int['Variables']['inter'])
-# R-squared del modelo para test
-print(Rsq(modeloStepAIC_con_trans_con_int['Modelo'], y_test, x_test_modeloStepAIC_con_trans_con_int))
+# # Preparo datos test
+# x_test_aleatorio = crear_data_modelo(x_test, modelo_aleatorio['Variables']['cont'], 
+#                                                     modelo_aleatorio['Variables']['categ'], 
+#                                                     modelo_aleatorio['Variables']['inter'])
+# # R-squared del modelo para test
+# print(Rsq(modelo_aleatorio['Modelo'], y_test, x_test_aleatorio))
 
 
-# MODELO 4 forward, métrica BIC  con transformaciones con interacciones
-modeloForwardBIC_con_trans_con_int = lm_forward(y_train, x_train, var_cont_con_transf, var_categ,
-                                interacciones_unicas, 'BIC')
+# # MODELO 1 forward, métrica AIC  con transformaciones con interacciones
 
-# Resumen del modelo
-print(modeloForwardBIC_con_trans_con_int['Modelo'].summary())
+# modeloForwardAIC_con_trans_con_int = lm_forward(y_train, x_train, var_cont_con_transf, var_categ,
+#                                 interacciones_unicas, 'AIC')
 
-# R-squared del modelo para train
-print(Rsq(modeloForwardBIC_con_trans_con_int['Modelo'], y_train, modeloForwardBIC_con_trans_con_int['X']))
+# # Resumen del modelo
+# print(modeloForwardAIC_con_trans_con_int['Modelo'].summary())
 
-# Preparo datos test
-x_test_modeloForwardBIC_con_trans_con_int = crear_data_modelo(x_test, modeloForwardBIC_con_trans_con_int['Variables']['cont'], 
-                                                    modeloForwardBIC_con_trans_con_int['Variables']['categ'], 
-                                                    modeloForwardBIC_con_trans_con_int['Variables']['inter'])
-# R-squared del modelo para test
-print(Rsq(modeloForwardBIC_con_trans_con_int['Modelo'], y_test, x_test_modeloForwardBIC_con_trans_con_int))
+# # R-squared del modelo para train
+# print(Rsq(modeloForwardAIC_con_trans_con_int['Modelo'], y_train, modeloForwardAIC_con_trans_con_int['X']))
 
-# MODELO 5 backward, métrica BIC  con transformaciones con interacciones
-modeloBackwardBIC_con_trans_con_int = lm_backward(y_train, x_train, var_cont_con_transf, var_categ,
-                                interacciones_unicas, 'BIC')
-
-# Resumen del modelo
-print(modeloBackwardBIC_con_trans_con_int['Modelo'].summary())
-
-# R-squared del modelo para train
-print(Rsq(modeloBackwardBIC_con_trans_con_int['Modelo'], y_train, modeloBackwardBIC_con_trans_con_int['X']))
-
-# Preparo datos test
-x_test_modeloBackwardBIC_con_trans_con_int = crear_data_modelo(x_test, modeloBackwardBIC_con_trans_con_int['Variables']['cont'], 
-                                                    modeloBackwardBIC_con_trans_con_int['Variables']['categ'], 
-                                                    modeloBackwardBIC_con_trans_con_int['Variables']['inter'])
-# R-squared del modelo para test
-print(Rsq(modeloBackwardBIC_con_trans_con_int['Modelo'], y_test, x_test_modeloBackwardBIC_con_trans_con_int))
-
-# MODELO 6 Stepwise, métrica BIC  con transformaciones con interacciones
-modeloStepBIC_con_trans_con_int = lm_stepwise(y_train, x_train, var_cont_con_transf, var_categ,
-                                interacciones_unicas, 'BIC')
-
-# Resumen del modelo
-print(modeloStepBIC_con_trans_con_int['Modelo'].summary())
-
-# R-squared del modelo para train
-print(Rsq(modeloStepBIC_con_trans_con_int['Modelo'], y_train, modeloStepBIC_con_trans_con_int['X']))
-
-# Preparo datos test
-x_test_modeloStepBIC_con_trans_con_int = crear_data_modelo(x_test, modeloStepBIC_con_trans_con_int['Variables']['cont'], 
-                                                    modeloStepBIC_con_trans_con_int['Variables']['categ'], 
-                                                    modeloStepBIC_con_trans_con_int['Variables']['inter'])
-# R-squared del modelo para test
-print(Rsq(modeloStepBIC_con_trans_con_int['Modelo'], y_test, x_test_modeloStepBIC_con_trans_con_int))
-
-#########################################################################################################################################
-########################################### TABLA RESUMEN ###############################################################################
-# Suponiendo que tienes estas listas con la información necesaria
-modelos = ['Modelo aleatorio', 'Modelo Backward AIC', 'Modelo Forward AIC', 'Modelo Stepwise AIC', 'Modelo Backward BIC', 'Modelo Forward BIC', 'Modelo Stepwise BIC']
-
-num_parametros = [
-                    len(modelo_aleatorio['Modelo'].params),
-                    len(modeloBackwardAIC_con_trans_con_int['Modelo'].params), 
-                    len(modeloForwardAIC_con_trans_con_int['Modelo'].params), 
-                    len(modeloStepAIC_con_trans_con_int['Modelo'].params), 
-                    len(modeloBackwardBIC_con_trans_con_int['Modelo'].params), 
-                    len(modeloForwardBIC_con_trans_con_int['Modelo'].params), 
-                    len(modeloStepBIC_con_trans_con_int['Modelo'].params)
-                ]
-
-r2_test = [
-            Rsq(modelo_aleatorio['Modelo'], y_test, x_test_aleatorio),
-            Rsq(modeloBackwardAIC_con_trans_con_int['Modelo'], y_test, x_test_modeloBackwardAIC_con_trans_con_int), 
-            Rsq(modeloForwardAIC_con_trans_con_int['Modelo'], y_test, x_test_modeloForwardAIC_con_trans_con_int),
-            Rsq(modeloStepAIC_con_trans_con_int['Modelo'], y_test, x_test_modeloStepAIC_con_trans_con_int),
-            Rsq(modeloBackwardBIC_con_trans_con_int['Modelo'], y_test, x_test_modeloBackwardBIC_con_trans_con_int), 
-            Rsq(modeloForwardBIC_con_trans_con_int['Modelo'], y_test, x_test_modeloForwardBIC_con_trans_con_int),
-            Rsq(modeloStepBIC_con_trans_con_int['Modelo'], y_test, x_test_modeloStepBIC_con_trans_con_int)
-            ]
-
-r2_train = [
-            Rsq(modelo_aleatorio['Modelo'], y_train, modelo_aleatorio['X']),
-            Rsq(modeloBackwardAIC_con_trans_con_int['Modelo'], y_train, modeloBackwardAIC_con_trans_con_int['X']),
-            Rsq(modeloForwardAIC_con_trans_con_int['Modelo'], y_train, modeloForwardAIC_con_trans_con_int['X']),
-            Rsq(modeloStepAIC_con_trans_con_int['Modelo'], y_train, modeloStepAIC_con_trans_con_int['X']),
-            Rsq(modeloBackwardBIC_con_trans_con_int['Modelo'], y_train, modeloBackwardBIC_con_trans_con_int['X']),
-            Rsq(modeloForwardBIC_con_trans_con_int['Modelo'], y_train, modeloForwardBIC_con_trans_con_int['X']),
-            Rsq(modeloStepBIC_con_trans_con_int['Modelo'], y_train, modeloStepBIC_con_trans_con_int['X'])
-            ]
-
-# Crear el DataFrame
-df = pd.DataFrame({
-    'Modelo': modelos,
-    'Número de Parámetros': num_parametros,
-    'R2 Train': r2_train,
-    'R2 Test': r2_test
-})
-
-# Mostrar el DataFrame
-print(df)
-
-df.to_csv('tabla_resultados_regresion_lineal.csv')
-
-#########################################################################################################################################
+# # Preparo datos test
+# x_test_modeloForwardAIC_con_trans_con_int = crear_data_modelo(x_test, modeloForwardAIC_con_trans_con_int['Variables']['cont'], 
+#                                                     modeloForwardAIC_con_trans_con_int['Variables']['categ'], 
+#                                                     modeloForwardAIC_con_trans_con_int['Variables']['inter'])
+# # R-squared del modelo para test
+# print(Rsq(modeloForwardAIC_con_trans_con_int['Modelo'], y_test, x_test_modeloForwardAIC_con_trans_con_int))
 
 
-# Hago validacion cruzada repetida para ver que modelo es mejor
-# Los mejores son: Stepwise AIC y BIC y Forward BIC
-# Crea un DataFrame vacío para almacenar resultados
-results = pd.DataFrame({
-    'Rsquared': []
-    , 'Resample': []
-    , 'Modelo': []
-})
+# # MODELO 2 backward, métrica AIC  con transformaciones con interacciones
 
-# Realiza el siguiente proceso 20 veces (representado por el bucle `for rep in range(20)`)
-for rep in range(20):
-    # Realiza validación cruzada en seis modelos diferentes y almacena sus R-squared en listas separadas
+# modeloBackwardAIC_con_trans_con_int = lm_backward(y_train, x_train, var_cont_con_transf, var_categ,
+#                                 interacciones_unicas, 'AIC')
 
-    modelo_stepBIC = validacion_cruzada_lm(
-        5
-        , x_train
-        , y_train
-        , modeloStepBIC_con_trans_con_int['Variables']['cont']
-        , modeloStepBIC_con_trans_con_int['Variables']['categ']
-        , modeloStepBIC_con_trans_con_int['Variables']['inter']
-    )
-    modelo_stepAIC = validacion_cruzada_lm(
-        5
-        , x_train
-        , y_train
-        , modeloStepAIC_con_trans_con_int['Variables']['cont']
-        , modeloStepAIC_con_trans_con_int['Variables']['categ']
-        , modeloStepAIC_con_trans_con_int['Variables']['inter']
-    )
-    modelo_forwardBIC = validacion_cruzada_lm(
-        5
-        , x_train
-        , y_train
-        , modeloForwardBIC_con_trans_con_int['Variables']['cont']
-        , modeloForwardBIC_con_trans_con_int['Variables']['categ']
-        , modeloForwardBIC_con_trans_con_int['Variables']['inter']
-    )
+# # Resumen del modelo
+# print(modeloBackwardAIC_con_trans_con_int['Modelo'].summary())
 
-    results_rep = pd.DataFrame({
-        'Rsquared': modelo_stepBIC + modelo_stepAIC + modelo_forwardBIC
-        , 'Resample': ['Rep' + str((rep + 1))]*5*3 # Etiqueta de repetición (5 repeticiones 3 modelos)
-        , 'Modelo': [1]*5 + [2]*5 + [3]*5 # Etiqueta de modelo (3 modelos 5 repeticiones)
-    })
-    results = pd.concat([results, results_rep], axis = 0)
+# # R-squared del modelo para train
+# print(Rsq(modeloBackwardAIC_con_trans_con_int['Modelo'], y_train, modeloBackwardAIC_con_trans_con_int['X']))
+
+# # Preparo datos test
+# x_test_modeloBackwardAIC_con_trans_con_int = crear_data_modelo(x_test, modeloBackwardAIC_con_trans_con_int['Variables']['cont'], 
+#                                                     modeloBackwardAIC_con_trans_con_int['Variables']['categ'], 
+#                                                     modeloBackwardAIC_con_trans_con_int['Variables']['inter'])
+# # R-squared del modelo para test
+# print(Rsq(modeloBackwardAIC_con_trans_con_int['Modelo'], y_test, x_test_modeloBackwardAIC_con_trans_con_int))
+
+# # MODELO 3 Stepwise, métrica AIC  con transformaciones con interacciones
+
+# modeloStepAIC_con_trans_con_int = lm_stepwise(y_train, x_train, var_cont_con_transf, var_categ,
+#                                 interacciones_unicas, 'AIC')
+
+# # Resumen del modelo
+# print(modeloStepAIC_con_trans_con_int['Modelo'].summary())
+
+# # R-squared del modelo para train
+# print(Rsq(modeloStepAIC_con_trans_con_int['Modelo'], y_train, modeloStepAIC_con_trans_con_int['X']))
+
+# # Preparo datos test
+# x_test_modeloStepAIC_con_trans_con_int = crear_data_modelo(x_test, modeloStepAIC_con_trans_con_int['Variables']['cont'], 
+#                                                     modeloStepAIC_con_trans_con_int['Variables']['categ'], 
+#                                                     modeloStepAIC_con_trans_con_int['Variables']['inter'])
+# # R-squared del modelo para test
+# print(Rsq(modeloStepAIC_con_trans_con_int['Modelo'], y_test, x_test_modeloStepAIC_con_trans_con_int))
+
+
+# # MODELO 4 forward, métrica BIC  con transformaciones con interacciones
+# modeloForwardBIC_con_trans_con_int = lm_forward(y_train, x_train, var_cont_con_transf, var_categ,
+#                                 interacciones_unicas, 'BIC')
+
+# # Resumen del modelo
+# print(modeloForwardBIC_con_trans_con_int['Modelo'].summary())
+
+# # R-squared del modelo para train
+# print(Rsq(modeloForwardBIC_con_trans_con_int['Modelo'], y_train, modeloForwardBIC_con_trans_con_int['X']))
+
+# # Preparo datos test
+# x_test_modeloForwardBIC_con_trans_con_int = crear_data_modelo(x_test, modeloForwardBIC_con_trans_con_int['Variables']['cont'], 
+#                                                     modeloForwardBIC_con_trans_con_int['Variables']['categ'], 
+#                                                     modeloForwardBIC_con_trans_con_int['Variables']['inter'])
+# # R-squared del modelo para test
+# print(Rsq(modeloForwardBIC_con_trans_con_int['Modelo'], y_test, x_test_modeloForwardBIC_con_trans_con_int))
+
+# # MODELO 5 backward, métrica BIC  con transformaciones con interacciones
+# modeloBackwardBIC_con_trans_con_int = lm_backward(y_train, x_train, var_cont_con_transf, var_categ,
+#                                 interacciones_unicas, 'BIC')
+
+# # Resumen del modelo
+# print(modeloBackwardBIC_con_trans_con_int['Modelo'].summary())
+
+# # R-squared del modelo para train
+# print(Rsq(modeloBackwardBIC_con_trans_con_int['Modelo'], y_train, modeloBackwardBIC_con_trans_con_int['X']))
+
+# # Preparo datos test
+# x_test_modeloBackwardBIC_con_trans_con_int = crear_data_modelo(x_test, modeloBackwardBIC_con_trans_con_int['Variables']['cont'], 
+#                                                     modeloBackwardBIC_con_trans_con_int['Variables']['categ'], 
+#                                                     modeloBackwardBIC_con_trans_con_int['Variables']['inter'])
+# # R-squared del modelo para test
+# print(Rsq(modeloBackwardBIC_con_trans_con_int['Modelo'], y_test, x_test_modeloBackwardBIC_con_trans_con_int))
+
+# # MODELO 6 Stepwise, métrica BIC  con transformaciones con interacciones
+# modeloStepBIC_con_trans_con_int = lm_stepwise(y_train, x_train, var_cont_con_transf, var_categ,
+#                                 interacciones_unicas, 'BIC')
+
+# # Resumen del modelo
+# print(modeloStepBIC_con_trans_con_int['Modelo'].summary())
+
+# # R-squared del modelo para train
+# print(Rsq(modeloStepBIC_con_trans_con_int['Modelo'], y_train, modeloStepBIC_con_trans_con_int['X']))
+
+# # Preparo datos test
+# x_test_modeloStepBIC_con_trans_con_int = crear_data_modelo(x_test, modeloStepBIC_con_trans_con_int['Variables']['cont'], 
+#                                                     modeloStepBIC_con_trans_con_int['Variables']['categ'], 
+#                                                     modeloStepBIC_con_trans_con_int['Variables']['inter'])
+# # R-squared del modelo para test
+# print(Rsq(modeloStepBIC_con_trans_con_int['Modelo'], y_test, x_test_modeloStepBIC_con_trans_con_int))
+
+# #########################################################################################################################################
+# ########################################### TABLA RESUMEN ###############################################################################
+# # Suponiendo que tienes estas listas con la información necesaria
+# modelos = ['Modelo aleatorio', 'Modelo Backward AIC', 'Modelo Forward AIC', 'Modelo Stepwise AIC', 'Modelo Backward BIC', 'Modelo Forward BIC', 'Modelo Stepwise BIC']
+
+# num_parametros = [
+#                     len(modelo_aleatorio['Modelo'].params),
+#                     len(modeloBackwardAIC_con_trans_con_int['Modelo'].params), 
+#                     len(modeloForwardAIC_con_trans_con_int['Modelo'].params), 
+#                     len(modeloStepAIC_con_trans_con_int['Modelo'].params), 
+#                     len(modeloBackwardBIC_con_trans_con_int['Modelo'].params), 
+#                     len(modeloForwardBIC_con_trans_con_int['Modelo'].params), 
+#                     len(modeloStepBIC_con_trans_con_int['Modelo'].params)
+#                 ]
+
+# r2_test = [
+#             Rsq(modelo_aleatorio['Modelo'], y_test, x_test_aleatorio),
+#             Rsq(modeloBackwardAIC_con_trans_con_int['Modelo'], y_test, x_test_modeloBackwardAIC_con_trans_con_int), 
+#             Rsq(modeloForwardAIC_con_trans_con_int['Modelo'], y_test, x_test_modeloForwardAIC_con_trans_con_int),
+#             Rsq(modeloStepAIC_con_trans_con_int['Modelo'], y_test, x_test_modeloStepAIC_con_trans_con_int),
+#             Rsq(modeloBackwardBIC_con_trans_con_int['Modelo'], y_test, x_test_modeloBackwardBIC_con_trans_con_int), 
+#             Rsq(modeloForwardBIC_con_trans_con_int['Modelo'], y_test, x_test_modeloForwardBIC_con_trans_con_int),
+#             Rsq(modeloStepBIC_con_trans_con_int['Modelo'], y_test, x_test_modeloStepBIC_con_trans_con_int)
+#             ]
+
+# r2_train = [
+#             Rsq(modelo_aleatorio['Modelo'], y_train, modelo_aleatorio['X']),
+#             Rsq(modeloBackwardAIC_con_trans_con_int['Modelo'], y_train, modeloBackwardAIC_con_trans_con_int['X']),
+#             Rsq(modeloForwardAIC_con_trans_con_int['Modelo'], y_train, modeloForwardAIC_con_trans_con_int['X']),
+#             Rsq(modeloStepAIC_con_trans_con_int['Modelo'], y_train, modeloStepAIC_con_trans_con_int['X']),
+#             Rsq(modeloBackwardBIC_con_trans_con_int['Modelo'], y_train, modeloBackwardBIC_con_trans_con_int['X']),
+#             Rsq(modeloForwardBIC_con_trans_con_int['Modelo'], y_train, modeloForwardBIC_con_trans_con_int['X']),
+#             Rsq(modeloStepBIC_con_trans_con_int['Modelo'], y_train, modeloStepBIC_con_trans_con_int['X'])
+#             ]
+
+# # Crear el DataFrame
+# df = pd.DataFrame({
+#     'Modelo': modelos,
+#     'Número de Parámetros': num_parametros,
+#     'R2 Train': r2_train,
+#     'R2 Test': r2_test
+# })
+
+# # Mostrar el DataFrame
+# print(df)
+
+# df.to_csv('tabla_resultados_regresion_lineal.csv')
+
+# #########################################################################################################################################
+
+
+# # Hago validacion cruzada repetida para ver que modelo es mejor
+# # Los mejores son: Stepwise AIC y BIC y Forward BIC
+# # Crea un DataFrame vacío para almacenar resultados
+# results = pd.DataFrame({
+#     'Rsquared': []
+#     , 'Resample': []
+#     , 'Modelo': []
+# })
+
+# # Realiza el siguiente proceso 20 veces (representado por el bucle `for rep in range(20)`)
+# for rep in range(20):
+#     # Realiza validación cruzada en seis modelos diferentes y almacena sus R-squared en listas separadas
+
+#     modelo_stepBIC = validacion_cruzada_lm(
+#         5
+#         , x_train
+#         , y_train
+#         , modeloStepBIC_con_trans_con_int['Variables']['cont']
+#         , modeloStepBIC_con_trans_con_int['Variables']['categ']
+#         , modeloStepBIC_con_trans_con_int['Variables']['inter']
+#     )
+#     modelo_forwardBIC = validacion_cruzada_lm(
+#         5
+#         , x_train
+#         , y_train
+#         , modeloForwardBIC_con_trans_con_int['Variables']['cont']
+#         , modeloForwardBIC_con_trans_con_int['Variables']['categ']
+#         , modeloForwardBIC_con_trans_con_int['Variables']['inter']
+#     )
+
+#     results_rep = pd.DataFrame({
+#         'Rsquared': modelo_stepBIC + modelo_forwardBIC
+#         , 'Resample': ['Rep' + str((rep + 1))]*5*2 # Etiqueta de repetición (5 repeticiones 2 modelos)
+#         , 'Modelo': [1]*5 + [2]*5 # Etiqueta de modelo (3 modelos 5 repeticiones)
+#     })
+#     results = pd.concat([results, results_rep], axis = 0)
     
-# Boxplot de la validacion cruzada 
-plt.figure(figsize=(10, 6))  # Crea una figura de tamaño 10x6
-plt.grid(True)  # Activa la cuadrícula en el gráficoç
-# Agrupa los valores de Rsquared por modelo
-grupo_metrica = results.groupby('Modelo')['Rsquared']
-# Organiza los valores de R-squared por grupo en una lista
-boxplot_data = [grupo_metrica.get_group(grupo).tolist() for grupo in grupo_metrica.groups]
-# Crea un boxplot con los datos organizados
-plt.boxplot(boxplot_data, labels=grupo_metrica.groups.keys())  # Etiqueta los grupos en el boxplot
-# Etiqueta los ejes del gráfico
-plt.xlabel('Modelo')  # Etiqueta del eje x
-plt.ylabel('Rsquared')  # Etiqueta del eje y
-plt.show()  # Muestra el gráfico 
+# # Boxplot de la validacion cruzada 
+# plt.figure(figsize=(10, 6))  # Crea una figura de tamaño 10x6
+# plt.grid(True)  # Activa la cuadrícula en el gráficoç
+# # Agrupa los valores de Rsquared por modelo
+# grupo_metrica = results.groupby('Modelo')['Rsquared']
+# # Organiza los valores de R-squared por grupo en una lista
+# boxplot_data = [grupo_metrica.get_group(grupo).tolist() for grupo in grupo_metrica.groups]
+# # Crea un boxplot con los datos organizados
+# plt.boxplot(boxplot_data, labels=grupo_metrica.groups.keys())  # Etiqueta los grupos en el boxplot
+# # Etiqueta los ejes del gráfico
+# plt.xlabel('Modelo')  # Etiqueta del eje x
+# plt.ylabel('Rsquared')  # Etiqueta del eje y
+# plt.show()  # Muestra el gráfico 
 
 
-results.to_csv("resultados_validacion_cruzada_reg_lineal.csv")
-print(results)
+# results.to_csv("resultados_validacion_cruzada_reg_lineal.csv")
+# print(results)
 
 
 
+# ## Modelo ganador: Stepwise BIC
+# print(modeloStepBIC_con_trans_con_int['Modelo'].summary())
 
-### Regresión Logística
 
+
+#######################################################################################################
+#################################### R. Logistica #####################################################
 x_train, x_test, y_train, y_test = train_test_split(input_bin, varObjBin, test_size = 0.2, random_state = 1234567)
 
 # Genera una lista con los nombres de las variables.
@@ -577,59 +619,97 @@ var_cont_con_transf = input_bin.select_dtypes(include=['int', 'int32', 'int64','
 interacciones = var_categ
 interacciones_unicas = list(itertools.combinations(interacciones, 2))
 
-# MODELO 0 aleatorio,
-modelo_aleatorio = glm(y_train.astype(int), x_train, random.sample(var_cont_con_transf, 3), random.sample(var_categ, 3),
-                                random.sample(interacciones_unicas,3))
+
+# MODELO 0 Selección aleatoria
+## Seleccion aleatoria (se coge la submuestra de los datos de entrenamiento)
+# Concretamente el 70% de los datos de entrenamiento utilizados para contruir los
+# modelos anteriores.
+# El método de selección usado ha sido el Stepwise con el criterio BIC
+# Se aplica este método a 30 submuestras diferentes
+
+# Inicializar un diccionario para almacenar las fórmulas y variables seleccionadas.
+variables_seleccionadas = {
+    'Formula': [],
+    'Variables': []
+}
+
+# Realizar 30 iteraciones de selección aleatoria.
+for x in range(30):
+    print('---------------------------- iter: ' + str(x))
+   
+    # Dividir los datos de entrenamiento en conjuntos de entrenamiento y prueba.
+    x_train2, x_test2, y_train2, y_test2 = train_test_split(x_train, y_train,
+                                                            test_size = 0.3, random_state = 1234567 + x)
+   
+    # Realizar la selección stepwise utilizando el criterio BIC en la submuestra.
+    modelo = glm_stepwise(y_train2, x_train2, var_cont_con_transf, var_categ, interacciones_unicas, 'BIC')
+   
+    # Almacenar las variables seleccionadas y la fórmula correspondiente.
+    variables_seleccionadas['Variables'].append(modelo['Variables'])
+    variables_seleccionadas['Formula'].append('+'.join(modelo['Variables']))
+  
+# Calcular la frecuencia de cada fórmula y ordenarlas por frecuencia
+frecuencias = Counter(variables_seleccionadas['Formula'])
+frec_ordenada = pd.DataFrame(list(frecuencias.items()), columns=['Formula', 'Frecuencia'])
+frec_ordenada = frec_ordenada.sort_values('Frecuencia', ascending=False).reset_index(drop=True)
+
+# Identificar las dos modelos más frecuentes y las variables correspondientes.
+ivar_1 = variables_seleccionadas['Variables'][variables_seleccionadas['Formula'].index(
+    frec_ordenada['Formula'][0])]
+
+# Con las variables obtenidas entrenamos el modelo aleatorio
+modelo_aleatorio = glm(y_train, x_train, ivar_1['cont'], ivar_1['categ'],
+                                 ivar_1['inter'])
 
 # Resumen del modelo
-print(modelo_aleatorio['Modelo'].summary())
+print(summary_glm(modelo_aleatorio['Modelo'], y_train, modelo_aleatorio['X']))
 
 # R-squared del modelo para train
-print(Rsq(modelo_aleatorio['Modelo'], y_train, modelo_aleatorio['X']))
+print(pseudoR2(modelo_aleatorio['Modelo'],  modelo_aleatorio['X'],  y_train))
 
 # Preparo datos test
 x_test_aleatorio = crear_data_modelo(x_test, modelo_aleatorio['Variables']['cont'], 
                                                     modelo_aleatorio['Variables']['categ'], 
                                                     modelo_aleatorio['Variables']['inter'])
+
 # R-squared del modelo para test
-print(Rsq(modelo_aleatorio['Modelo'], y_test, x_test_aleatorio))
+print(pseudoR2(modelo_aleatorio['Modelo'], x_test_aleatorio,  y_test))
 
 # MODELO 1 forward, métrica AIC  con transformaciones con interacciones
-
 modeloForwardAIC_con_trans_con_int = glm_forward(y_train, x_train, var_cont_con_transf, var_categ,
                                 interacciones_unicas, 'AIC')
 
 # Resumen del modelo
-print(modeloForwardAIC_con_trans_con_int['Modelo'].summary())
+print(summary_glm(modeloForwardAIC_con_trans_con_int['Modelo'], y_train, modeloForwardAIC_con_trans_con_int['X']))
 
 # R-squared del modelo para train
-print(Rsq(modeloForwardAIC_con_trans_con_int['Modelo'], y_train, modeloForwardAIC_con_trans_con_int['X']))
+print(pseudoR2(modeloForwardAIC_con_trans_con_int['Modelo'], modeloForwardAIC_con_trans_con_int['X'],  y_train))
 
 # Preparo datos test
 x_test_modeloForwardAIC_con_trans_con_int = crear_data_modelo(x_test, modeloForwardAIC_con_trans_con_int['Variables']['cont'], 
                                                     modeloForwardAIC_con_trans_con_int['Variables']['categ'], 
                                                     modeloForwardAIC_con_trans_con_int['Variables']['inter'])
 # R-squared del modelo para test
-print(Rsq(modeloForwardAIC_con_trans_con_int['Modelo'], y_test, x_test_modeloForwardAIC_con_trans_con_int))
+print(pseudoR2(modeloForwardAIC_con_trans_con_int['Modelo'],  x_test_modeloForwardAIC_con_trans_con_int, y_test))
 
 
 # MODELO 2 backward, métrica AIC  con transformaciones con interacciones
-
 modeloBackwardAIC_con_trans_con_int = glm_backward(y_train, x_train, var_cont_con_transf, var_categ,
                                 interacciones_unicas, 'AIC')
 
 # Resumen del modelo
-print(modeloBackwardAIC_con_trans_con_int['Modelo'].summary())
+print(summary_glm(modeloBackwardAIC_con_trans_con_int['Modelo'], y_train, modeloBackwardAIC_con_trans_con_int['X']))
 
 # R-squared del modelo para train
-print(Rsq(modeloBackwardAIC_con_trans_con_int['Modelo'], y_train, modeloBackwardAIC_con_trans_con_int['X']))
+print(pseudoR2(modeloBackwardAIC_con_trans_con_int['Modelo'], modeloBackwardAIC_con_trans_con_int['X'],  y_train))
 
 # Preparo datos test
 x_test_modeloBackwardAIC_con_trans_con_int = crear_data_modelo(x_test, modeloBackwardAIC_con_trans_con_int['Variables']['cont'], 
                                                     modeloBackwardAIC_con_trans_con_int['Variables']['categ'], 
                                                     modeloBackwardAIC_con_trans_con_int['Variables']['inter'])
+
 # R-squared del modelo para test
-print(Rsq(modeloBackwardAIC_con_trans_con_int['Modelo'], y_test, x_test_modeloBackwardAIC_con_trans_con_int))
+print(pseudoR2(modeloBackwardAIC_con_trans_con_int['Modelo'], x_test_modeloBackwardAIC_con_trans_con_int, y_test))
 
 # MODELO 3 Stepwise, métrica AIC  con transformaciones con interacciones
 
@@ -637,17 +717,18 @@ modeloStepAIC_con_trans_con_int = glm_stepwise(y_train, x_train, var_cont_con_tr
                                 interacciones_unicas, 'AIC')
 
 # Resumen del modelo
-print(modeloStepAIC_con_trans_con_int['Modelo'].summary())
+print(summary_glm(modeloStepAIC_con_trans_con_int['Modelo'], y_train, modeloStepAIC_con_trans_con_int['X']))
 
 # R-squared del modelo para train
-print(Rsq(modeloStepAIC_con_trans_con_int['Modelo'], y_train, modeloStepAIC_con_trans_con_int['X']))
+print(pseudoR2(modeloStepAIC_con_trans_con_int['Modelo'], modeloStepAIC_con_trans_con_int['X'],  y_train))
 
 # Preparo datos test
 x_test_modeloStepAIC_con_trans_con_int = crear_data_modelo(x_test, modeloStepAIC_con_trans_con_int['Variables']['cont'], 
                                                     modeloStepAIC_con_trans_con_int['Variables']['categ'], 
                                                     modeloStepAIC_con_trans_con_int['Variables']['inter'])
+
 # R-squared del modelo para test
-print(Rsq(modeloStepAIC_con_trans_con_int['Modelo'], y_test, x_test_modeloStepAIC_con_trans_con_int))
+print(pseudoR2(modeloStepAIC_con_trans_con_int['Modelo'], x_test_modeloStepAIC_con_trans_con_int, y_test))
 
 
 # MODELO 4 forward, métrica BIC  con transformaciones con interacciones
@@ -655,51 +736,52 @@ modeloForwardBIC_con_trans_con_int = glm_forward(y_train, x_train, var_cont_con_
                                 interacciones_unicas, 'BIC')
 
 # Resumen del modelo
-print(modeloForwardBIC_con_trans_con_int['Modelo'].summary())
+print(summary_glm(modeloForwardBIC_con_trans_con_int['Modelo'], y_train, modeloForwardBIC_con_trans_con_int['X']))
 
 # R-squared del modelo para train
-print(Rsq(modeloForwardBIC_con_trans_con_int['Modelo'], y_train, modeloForwardBIC_con_trans_con_int['X']))
+print(pseudoR2(modeloForwardBIC_con_trans_con_int['Modelo'], modeloForwardBIC_con_trans_con_int['X'], y_train))
 
 # Preparo datos test
 x_test_modeloForwardBIC_con_trans_con_int = crear_data_modelo(x_test, modeloForwardBIC_con_trans_con_int['Variables']['cont'], 
                                                     modeloForwardBIC_con_trans_con_int['Variables']['categ'], 
                                                     modeloForwardBIC_con_trans_con_int['Variables']['inter'])
+
 # R-squared del modelo para test
-print(Rsq(modeloForwardBIC_con_trans_con_int['Modelo'], y_test, x_test_modeloForwardBIC_con_trans_con_int))
+print(pseudoR2(modeloForwardBIC_con_trans_con_int['Modelo'], x_test_modeloForwardBIC_con_trans_con_int, y_test))
 
 # MODELO 5 backward, métrica BIC  con transformaciones con interacciones
 modeloBackwardBIC_con_trans_con_int = glm_backward(y_train, x_train, var_cont_con_transf, var_categ,
                                 interacciones_unicas, 'BIC')
 
 # Resumen del modelo
-print(modeloBackwardBIC_con_trans_con_int['Modelo'].summary())
+print(summary_glm(modeloBackwardBIC_con_trans_con_int['Modelo'], y_train, modeloBackwardBIC_con_trans_con_int['X']))
 
 # R-squared del modelo para train
-print(Rsq(modeloBackwardBIC_con_trans_con_int['Modelo'], y_train, modeloBackwardBIC_con_trans_con_int['X']))
+print(pseudoR2(modeloBackwardBIC_con_trans_con_int['Modelo'], modeloBackwardBIC_con_trans_con_int['X'], y_train))
 
 # Preparo datos test
 x_test_modeloBackwardBIC_con_trans_con_int = crear_data_modelo(x_test, modeloBackwardBIC_con_trans_con_int['Variables']['cont'], 
                                                     modeloBackwardBIC_con_trans_con_int['Variables']['categ'], 
                                                     modeloBackwardBIC_con_trans_con_int['Variables']['inter'])
 # R-squared del modelo para test
-print(Rsq(modeloBackwardBIC_con_trans_con_int['Modelo'], y_test, x_test_modeloBackwardBIC_con_trans_con_int))
+print(pseudoR2(modeloBackwardBIC_con_trans_con_int['Modelo'], x_test_modeloBackwardBIC_con_trans_con_int, y_test))
 
 # MODELO 6 Stepwise, métrica BIC  con transformaciones con interacciones
 modeloStepBIC_con_trans_con_int = glm_stepwise(y_train, x_train, var_cont_con_transf, var_categ,
                                 interacciones_unicas, 'BIC')
 
 # Resumen del modelo
-print(modeloStepBIC_con_trans_con_int['Modelo'].summary())
+print(summary_glm(modeloStepBIC_con_trans_con_int['Modelo'], y_train, modeloStepBIC_con_trans_con_int['X']))
 
 # R-squared del modelo para train
-print(Rsq(modeloStepBIC_con_trans_con_int['Modelo'], y_train, modeloStepBIC_con_trans_con_int['X']))
+print(pseudoR2(modeloStepBIC_con_trans_con_int['Modelo'], modeloStepBIC_con_trans_con_int['X'], y_train))
 
 # Preparo datos test
 x_test_modeloStepBIC_con_trans_con_int = crear_data_modelo(x_test, modeloStepBIC_con_trans_con_int['Variables']['cont'], 
                                                     modeloStepBIC_con_trans_con_int['Variables']['categ'], 
                                                     modeloStepBIC_con_trans_con_int['Variables']['inter'])
 # R-squared del modelo para test
-print(Rsq(modeloStepBIC_con_trans_con_int['Modelo'], y_test, x_test_modeloStepBIC_con_trans_con_int))
+print(pseudoR2(modeloStepBIC_con_trans_con_int['Modelo'], x_test_modeloStepBIC_con_trans_con_int, y_test))
 
 #########################################################################################################################################
 ########################################### TABLA RESUMEN ###############################################################################
@@ -707,33 +789,33 @@ print(Rsq(modeloStepBIC_con_trans_con_int['Modelo'], y_test, x_test_modeloStepBI
 modelos = ['Modelo aleatorio', 'Modelo Backward AIC', 'Modelo Forward AIC', 'Modelo Stepwise AIC', 'Modelo Backward BIC', 'Modelo Forward BIC', 'Modelo Stepwise BIC']
 
 num_parametros = [
-                    len(modelo_aleatorio['Modelo'].params),
-                    len(modeloBackwardAIC_con_trans_con_int['Modelo'].params), 
-                    len(modeloForwardAIC_con_trans_con_int['Modelo'].params), 
-                    len(modeloStepAIC_con_trans_con_int['Modelo'].params), 
-                    len(modeloBackwardBIC_con_trans_con_int['Modelo'].params), 
-                    len(modeloForwardBIC_con_trans_con_int['Modelo'].params), 
-                    len(modeloStepBIC_con_trans_con_int['Modelo'].params)
+                    len(modelo_aleatorio['Modelo'].coef_[0]),
+                    len(modeloBackwardAIC_con_trans_con_int['Modelo'].coef_[0]), 
+                    len(modeloForwardAIC_con_trans_con_int['Modelo'].coef_[0]), 
+                    len(modeloStepAIC_con_trans_con_int['Modelo'].coef_[0]), 
+                    len(modeloBackwardBIC_con_trans_con_int['Modelo'].coef_[0]), 
+                    len(modeloForwardBIC_con_trans_con_int['Modelo'].coef_[0]), 
+                    len(modeloStepBIC_con_trans_con_int['Modelo'].coef_[0])
                 ]
 
 r2_test = [
-            Rsq(modelo_aleatorio['Modelo'], y_test, x_test_aleatorio),
-            Rsq(modeloBackwardAIC_con_trans_con_int['Modelo'], y_test, x_test_modeloBackwardAIC_con_trans_con_int), 
-            Rsq(modeloForwardAIC_con_trans_con_int['Modelo'], y_test, x_test_modeloForwardAIC_con_trans_con_int),
-            Rsq(modeloStepAIC_con_trans_con_int['Modelo'], y_test, x_test_modeloStepAIC_con_trans_con_int),
-            Rsq(modeloBackwardBIC_con_trans_con_int['Modelo'], y_test, x_test_modeloBackwardBIC_con_trans_con_int), 
-            Rsq(modeloForwardBIC_con_trans_con_int['Modelo'], y_test, x_test_modeloForwardBIC_con_trans_con_int),
-            Rsq(modeloStepBIC_con_trans_con_int['Modelo'], y_test, x_test_modeloStepBIC_con_trans_con_int)
+            pseudoR2(modelo_aleatorio['Modelo'], x_test_aleatorio, y_test),
+            pseudoR2(modeloBackwardAIC_con_trans_con_int['Modelo'], x_test_modeloBackwardAIC_con_trans_con_int, y_test), 
+            pseudoR2(modeloForwardAIC_con_trans_con_int['Modelo'], x_test_modeloForwardAIC_con_trans_con_int, y_test),
+            pseudoR2(modeloStepAIC_con_trans_con_int['Modelo'], x_test_modeloStepAIC_con_trans_con_int, y_test),
+            pseudoR2(modeloBackwardBIC_con_trans_con_int['Modelo'], x_test_modeloBackwardBIC_con_trans_con_int, y_test), 
+            pseudoR2(modeloForwardBIC_con_trans_con_int['Modelo'], x_test_modeloForwardBIC_con_trans_con_int, y_test),
+            pseudoR2(modeloStepBIC_con_trans_con_int['Modelo'], x_test_modeloStepBIC_con_trans_con_int, y_test)
             ]
 
 r2_train = [
-            Rsq(modelo_aleatorio['Modelo'], y_train, modelo_aleatorio['X']),
-            Rsq(modeloBackwardAIC_con_trans_con_int['Modelo'], y_train, modeloBackwardAIC_con_trans_con_int['X']),
-            Rsq(modeloForwardAIC_con_trans_con_int['Modelo'], y_train, modeloForwardAIC_con_trans_con_int['X']),
-            Rsq(modeloStepAIC_con_trans_con_int['Modelo'], y_train, modeloStepAIC_con_trans_con_int['X']),
-            Rsq(modeloBackwardBIC_con_trans_con_int['Modelo'], y_train, modeloBackwardBIC_con_trans_con_int['X']),
-            Rsq(modeloForwardBIC_con_trans_con_int['Modelo'], y_train, modeloForwardBIC_con_trans_con_int['X']),
-            Rsq(modeloStepBIC_con_trans_con_int['Modelo'], y_train, modeloStepBIC_con_trans_con_int['X'])
+            pseudoR2(modelo_aleatorio['Modelo'], modelo_aleatorio['X'], y_train),
+            pseudoR2(modeloBackwardAIC_con_trans_con_int['Modelo'], modeloBackwardAIC_con_trans_con_int['X'], y_train),
+            pseudoR2(modeloForwardAIC_con_trans_con_int['Modelo'], modeloForwardAIC_con_trans_con_int['X'], y_train),
+            pseudoR2(modeloStepAIC_con_trans_con_int['Modelo'], modeloStepAIC_con_trans_con_int['X'], y_train),
+            pseudoR2(modeloBackwardBIC_con_trans_con_int['Modelo'], modeloBackwardBIC_con_trans_con_int['X'], y_train),
+            pseudoR2(modeloForwardBIC_con_trans_con_int['Modelo'], modeloForwardBIC_con_trans_con_int['X'], y_train),
+            pseudoR2(modeloStepBIC_con_trans_con_int['Modelo'], modeloStepBIC_con_trans_con_int['X'], y_train)
             ]
 
 # Crear el DataFrame
@@ -749,6 +831,15 @@ print(df)
 
 df.to_csv('tabla_resultados_regresion_logistica.csv')
 
+# Mejor modelo según el Área bajo la Curva ROC
+AUC0 = curva_roc(x_test_aleatorio, y_test, modelo_aleatorio)
+AUC1 = curva_roc(x_test_modeloBackwardAIC_con_trans_con_int, y_test, modeloBackwardAIC_con_trans_con_int)
+AUC2 = curva_roc(x_test_modeloForwardAIC_con_trans_con_int, y_test, modeloForwardAIC_con_trans_con_int)
+AUC3 = curva_roc(x_test_modeloStepAIC_con_trans_con_int, y_test, modeloStepAIC_con_trans_con_int)
+AUC4 = curva_roc(x_test_modeloBackwardBIC_con_trans_con_int, y_test, modeloBackwardBIC_con_trans_con_int)
+AUC5 = curva_roc(x_test_modeloForwardBIC_con_trans_con_int, y_test, modeloForwardBIC_con_trans_con_int)
+AUC6 = curva_roc(x_test_modeloStepBIC_con_trans_con_int, y_test, modeloStepBIC_con_trans_con_int)
+
 # Hago validacion cruzada repetida para ver que modelo es mejor
 # Crea un DataFrame vacío para almacenar resultados
 results = pd.DataFrame({
@@ -760,7 +851,6 @@ results = pd.DataFrame({
 # Realiza el siguiente proceso 20 veces (representado por el bucle `for rep in range(20)`)
 for rep in range(20):
     # Realiza validación cruzada en seis modelos diferentes y almacena sus R-squared en listas separadas
-
     modelo_stepBIC = validacion_cruzada_glm(
         5
         , x_train
@@ -777,38 +867,114 @@ for rep in range(20):
         , modeloStepAIC_con_trans_con_int['Variables']['categ']
         , modeloStepAIC_con_trans_con_int['Variables']['inter']
     )
+    modelo_backBIC = validacion_cruzada_glm(
+        5
+        , x_train
+        , y_train
+        , modeloBackwardBIC_con_trans_con_int['Variables']['cont']
+        , modeloBackwardBIC_con_trans_con_int['Variables']['categ']
+        , modeloBackwardBIC_con_trans_con_int['Variables']['inter']
+    )
 
+    # Crea un DataFrame con los resultados de validación cruzada para esta repetición
     results_rep = pd.DataFrame({
-        'Rsquared': modelo_stepBIC + modelo_stepAIC
-        , 'Resample': ['Rep' + str((rep + 1))]*5*2 # Etiqueta de repetición (5 repeticiones 2 modelos)
-        , 'Modelo': [1]*5 + [2]*5 # Etiqueta de modelo (2 modelos 5 repeticiones)
+        'AUC': modelo_stepBIC + modelo_stepAIC + modelo_backBIC
+        , 'Resample': ['Rep' + str((rep + 1))]*5*3  # Etiqueta de repetición (5 repeticiones 6 modelos)
+        , 'Modelo': [1]*5 + [2]*5 + [3]*5 # Etiqueta de modelo (6 modelos 5 repeticiones)
     })
     results = pd.concat([results, results_rep], axis = 0)
-    
+
+
 # Boxplot de la validacion cruzada 
 plt.figure(figsize=(10, 6))  # Crea una figura de tamaño 10x6
-plt.grid(True)  # Activa la cuadrícula en el gráfico
-# Agrupa los valores de Rsquared por modelo
-grupo_metrica = results.groupby('Modelo')['Rsquared']
+plt.grid(True)  # Activa la cuadrícula en el gráficoç
+# Agrupa los valores de AUC por modelo
+grupo_metrica = results.groupby('Modelo')['AUC']
 # Organiza los valores de R-squared por grupo en una lista
 boxplot_data = [grupo_metrica.get_group(grupo).tolist() for grupo in grupo_metrica.groups]
 # Crea un boxplot con los datos organizados
 plt.boxplot(boxplot_data, labels=grupo_metrica.groups.keys())  # Etiqueta los grupos en el boxplot
 # Etiqueta los ejes del gráfico
 plt.xlabel('Modelo')  # Etiqueta del eje x
-plt.ylabel('Rsquared')  # Etiqueta del eje y
-plt.show()  # Muestra el gráfico 
+plt.ylabel('AUC')  # Etiqueta del eje y
+plt.show()  # Muestra el gráfico  
 
-
-
-
+ 
+# Calcular la media del AUC por modelo
+results.groupby('Modelo')['AUC'].mean()
+# Calcular la desviación estándar del AUC por modelo
+results.groupby('Modelo')['AUC'].std()    
+# Guardamos resultados
 results.to_csv("resultados_regresion_logistica.csv")
 print(results)
 
 
+# CALCULAMOS PUNTO DE CORTE
+# Generamos una rejilla de puntos de corte
+posiblesCortes = np.arange(0, 1.01, 0.01).tolist()  # Generamos puntos de corte de 0 a 1 con intervalo de 0.01
+rejilla = pd.DataFrame({
+    'PtoCorte': [],
+    'Accuracy': [],
+    'Sensitivity': [],
+    'Specificity': [],
+    'PosPredValue': [],
+    'NegPredValue': []
+})  # Creamos un DataFrame para almacenar las métricas para cada punto de corte
 
+for pto_corte in posiblesCortes:  # Iteramos sobre los puntos de corte
+    rejilla = pd.concat(
+        [rejilla, sensEspCorte(modeloBackwardBIC_con_trans_con_int['Modelo'], x_test, y_test, pto_corte, modeloBackwardBIC_con_trans_con_int['Variables']['cont'], modeloBackwardBIC_con_trans_con_int['Variables']['categ'], modeloBackwardBIC_con_trans_con_int['Variables']['inter'])],
+        axis=0
+    )  # Calculamos las métricas para el punto de corte actual y lo agregamos al DataFrame
 
+rejilla['Youden'] = rejilla['Sensitivity'] + rejilla['Specificity'] - 1  # Calculamos el índice de Youden
+rejilla.index = list(range(len(rejilla)))  # Reindexamos el DataFrame para que los índices sean consecutivos
 
+plt.plot(rejilla['PtoCorte'], rejilla['Youden'])
+plt.xlabel('Posibles Cortes')
+plt.ylabel('Youden')
+plt.title('Youden')
+plt.show()
+
+plt.plot(rejilla['PtoCorte'], rejilla['Accuracy'])
+plt.xlabel('Posibles Cortes')
+plt.ylabel('Accuracy')
+plt.title('Accuracy')
+plt.show()
+
+print(rejilla['PtoCorte'][rejilla['Youden'].idxmax()])
+print(rejilla['PtoCorte'][rejilla['Accuracy'].idxmax()])
+
+# El resultado es 0.41 para youden y 0.46 para Accuracy
+# Los comparamos
+sensEspCorte(modeloBackwardBIC_con_trans_con_int['Modelo'], x_test, y_test, 0.41, modeloBackwardBIC_con_trans_con_int['Variables']['cont'], modeloBackwardBIC_con_trans_con_int['Variables']['categ'], modeloBackwardBIC_con_trans_con_int['Variables']['inter'])
+sensEspCorte(modeloBackwardBIC_con_trans_con_int['Modelo'], x_test, y_test, 0.46, modeloBackwardBIC_con_trans_con_int['Variables']['cont'], modeloBackwardBIC_con_trans_con_int['Variables']['categ'], modeloBackwardBIC_con_trans_con_int['Variables']['inter'])
+
+# Vemos las variables mas importantes del modelo ganador
+impVariablesLog(modeloBackwardBIC_con_trans_con_int, y_train, x_train, modeloBackwardBIC_con_trans_con_int['Variables']['cont'], modeloBackwardBIC_con_trans_con_int['Variables']['categ'], modeloBackwardBIC_con_trans_con_int['Variables']['inter'])
+
+# Vemos los coeficientes del modelo ganador
+coeficientes = modeloBackwardBIC_con_trans_con_int['Modelo'].coef_
+nombres_caracteristicas = crear_data_modelo(x_train, modeloBackwardBIC_con_trans_con_int['Variables']['cont'], modeloBackwardBIC_con_trans_con_int['Variables']['categ'], modeloBackwardBIC_con_trans_con_int['Variables']['inter']).columns  # Suponiendo que X_train es un DataFrame de pandas
+# Imprime los nombres de las características junto con sus coeficientes
+for nombre, coef in zip(nombres_caracteristicas, coeficientes[0]):
+    print(f"Variable: {nombre}, Coeficiente: {coef}")
+
+# Evaluamos la estabilidad del modelo a partir de las diferencias en train y test:
+pseudoR2(modeloBackwardBIC_con_trans_con_int['Modelo'], modeloBackwardBIC_con_trans_con_int['X'], y_train)
+pseudoR2(modeloBackwardBIC_con_trans_con_int['Modelo'], x_test_modeloBackwardBIC_con_trans_con_int, y_test)
+# Es poca la diferencia, por lo que el modelo se puede considerar robusto
+
+# Calculamos la diferencia del Area bajo la curva ROC en train y test
+curva_roc(crear_data_modelo(x_train, modeloBackwardBIC_con_trans_con_int['Variables']['cont'], modeloBackwardBIC_con_trans_con_int['Variables']['categ'], modeloBackwardBIC_con_trans_con_int['Variables']['inter']), y_train, modeloBackwardBIC_con_trans_con_int)
+curva_roc(x_test_modeloBackwardBIC_con_trans_con_int, y_test, modeloBackwardBIC_con_trans_con_int)
+
+# Calculamos la diferencia de las medidas de calidad entre train y test 
+sensEspCorte(modeloBackwardBIC_con_trans_con_int['Modelo'], x_train, y_train, 0.46, modeloBackwardBIC_con_trans_con_int['Variables']['cont'], modeloBackwardBIC_con_trans_con_int['Variables']['categ'], modeloBackwardBIC_con_trans_con_int['Variables']['inter'])
+sensEspCorte(modeloBackwardBIC_con_trans_con_int['Modelo'], x_test, y_test, 0.46, modeloBackwardBIC_con_trans_con_int['Variables']['cont'], modeloBackwardBIC_con_trans_con_int['Variables']['categ'], modeloBackwardBIC_con_trans_con_int['Variables']['inter'])
+
+# Summary del modelo ganador
+print(summary_glm(modeloBackwardBIC_con_trans_con_int['Modelo'], y_train, modeloBackwardBIC_con_trans_con_int['X']))
 
 exit()
 
