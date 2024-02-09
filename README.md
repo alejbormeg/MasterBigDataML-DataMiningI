@@ -1,9 +1,17 @@
 # Proyecto de Minería de Datos
 
+&nbsp;
+
 ## Portada
 - **Nombre del Analista:** Alejandro Borrego Megías
 - **Fecha:** 24-12-2023
 - **Correo Electrónico:** alejbormeg@gmail.com
+
+&nbsp;
+
+---
+
+&nbsp;
 
 ## Índice
 - [1. Introducción al objetivo del problema y las variables implicadas.](#1-introducción-al-objetivo-del-problema-y-las-variables-implicadas)
@@ -33,6 +41,11 @@
   - [10.5 Interpretación de los coeficientes de dos variables incluidas en el modelo (una binaria y otra continua)](#105-interpretación-de-los-coeficientes-de-dos-variables-incluidas-en-el-modelo-una-binaria-y-otra-continua)
   - [10.6 Justificación del mejor modelo y medición de la calidad del mismo](#106-justificación-del-mejor-modelo-y-medición-de-la-calidad-del-mismo)
 
+&nbsp;
+
+---
+
+<div style="page-break-after: always;"></div>
 
 ## 1. Introducción al objetivo del problema y las variables implicadas.
 
